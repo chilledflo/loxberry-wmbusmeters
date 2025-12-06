@@ -45,9 +45,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 exec("systemctl is-active wmbusmeters 2>&1", $status_output, $status_return);
 $is_running = ($status_return === 0 && trim($status_output[0]) === 'active');
 
-// Get version
-exec("wmbusmeters --version 2>&1", $version_output);
-$version = isset($version_output[0]) ? trim($version_output[0]) : "Nicht installiert";
+// Get version - try multiple locations
+$version = "Nicht installiert";
+if (file_exists("/usr/local/bin/wmbusmeters")) {
+    exec("/usr/local/bin/wmbusmeters --version 2>&1", $version_output, $version_return);
+    if ($version_return === 0 && isset($version_output[0])) {
+        $version = trim($version_output[0]);
+    }
+} elseif (file_exists("/usr/bin/wmbusmeters")) {
+    exec("/usr/bin/wmbusmeters --version 2>&1", $version_output, $version_return);
+    if ($version_return === 0 && isset($version_output[0])) {
+        $version = trim($version_output[0]);
+    }
+} else {
+    exec("which wmbusmeters 2>&1", $which_output);
+    if (!empty($which_output[0]) && file_exists(trim($which_output[0]))) {
+        exec(trim($which_output[0]) . " --version 2>&1", $version_output, $version_return);
+        if ($version_return === 0 && isset($version_output[0])) {
+            $version = trim($version_output[0]);
+        }
+    }
+}
 ?>
 
 <style>

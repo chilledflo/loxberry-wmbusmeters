@@ -86,17 +86,37 @@ git clone https://github.com/wmbusmeters/wmbusmeters.git
 cd wmbusmeters
 
 echo "<INFO> Building wmbusmeters..."
+./configure
 make
+
+echo "<INFO> Installing wmbusmeters..."
 make install
 
-# Verify installation
-if ! command -v wmbusmeters &> /dev/null; then
-    echo "<FAIL> wmbusmeters installation failed - binary not found in PATH"
+# Update library cache
+ldconfig
+
+# Force rehash PATH
+hash -r
+
+# Verify installation - check multiple locations
+echo "<INFO> Verifying wmbusmeters installation..."
+if [ -f "/usr/local/bin/wmbusmeters" ]; then
+    echo "<OK> Found wmbusmeters at: /usr/local/bin/wmbusmeters"
+    WMBUSMETERS_BIN="/usr/local/bin/wmbusmeters"
+elif [ -f "/usr/bin/wmbusmeters" ]; then
+    echo "<OK> Found wmbusmeters at: /usr/bin/wmbusmeters"
+    WMBUSMETERS_BIN="/usr/bin/wmbusmeters"
+else
+    echo "<FAIL> wmbusmeters binary not found after installation"
+    echo "<INFO> Searching for wmbusmeters..."
+    find /usr -name wmbusmeters 2>/dev/null
     exit 1
 fi
 
-INSTALLED_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+# Test the binary
+INSTALLED_VERSION=$($WMBUSMETERS_BIN --version 2>&1 | head -n1)
 echo "<OK> wmbusmeters installed successfully: $INSTALLED_VERSION"
+echo "<OK> Binary location: $WMBUSMETERS_BIN"
 
 # Create default configuration
 echo "<INFO> Creating default configuration at $PCONFIG/wmbusmeters.conf"
@@ -128,9 +148,10 @@ else
     exit 1
 fi
 
-# Create systemd service file
+# Create systemd service file using the detected binary location
 CONFPATH="$PCONFIG/wmbusmeters.conf"
 echo "<INFO> Creating systemd service with config path: $CONFPATH"
+echo "<INFO> Using binary at: $WMBUSMETERS_BIN"
 cat > /etc/systemd/system/wmbusmeters.service << EOFSERVICE
 [Unit]
 Description=WMBus Meters Service
@@ -141,7 +162,7 @@ Documentation=https://github.com/wmbusmeters/wmbusmeters
 Type=simple
 User=loxberry
 Group=loxberry
-ExecStart=/usr/bin/wmbusmeters --useconfig=$CONFPATH
+ExecStart=$WMBUSMETERS_BIN --useconfig=$CONFPATH
 Restart=always
 RestartSec=10
 
@@ -151,6 +172,7 @@ EOFSERVICE
 
 if [ -f "/etc/systemd/system/wmbusmeters.service" ]; then
     echo "<OK> Systemd service created successfully"
+    echo "<INFO> Service file content:"
     cat /etc/systemd/system/wmbusmeters.service
 else
     echo "<FAIL> Failed to create systemd service"
