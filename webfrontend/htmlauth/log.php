@@ -29,6 +29,8 @@ select { padding: 8px; border-radius: 4px; border: 1px solid #ddd; margin: 5px; 
     <label>Log-Typ:</label>
     <select onchange="location = 'log.php?type=' + this.value + '&lines=<?php echo $lines; ?>'">
         <option value="install" <?php echo $log_type === 'install' ? 'selected' : ''; ?>>Installation Log</option>
+        <option value="preinstall" <?php echo $log_type === 'preinstall' ? 'selected' : ''; ?>>Pre-Installation Log</option>
+        <option value="preupgrade" <?php echo $log_type === 'preupgrade' ? 'selected' : ''; ?>>Pre-Upgrade Log</option>
         <option value="service" <?php echo $log_type === 'service' ? 'selected' : ''; ?>>Service Log</option>
         <option value="readings" <?php echo $log_type === 'readings' ? 'selected' : ''; ?>>Meter Readings</option>
     </select>
@@ -56,6 +58,14 @@ switch ($log_type) {
     case 'install':
         $log_file = $lbplogdir . "/install.log";
         $title = "Installation Log";
+        break;
+    case 'preinstall':
+        $log_file = $lbplogdir . "/preinstall.log";
+        $title = "Pre-Installation Log";
+        break;
+    case 'preupgrade':
+        $log_file = $lbplogdir . "/preupgrade.log";
+        $title = "Pre-Upgrade Log";
         break;
     case 'readings':
         $log_file = "/var/log/wmbusmeters/meter_readings";

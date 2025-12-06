@@ -4,17 +4,21 @@
 # Will be executed before plugin upgrade
 
 ARGV0=$0 # Zero argument is shell command
-ARGV1=$1 # First argument is folder path
-ARGV2=$2 # Second argument is plugin name
+PTEMPDIR=$1 # First argument is temp folder during install
+PSHNAME=$2  # Second argument is Plugin-Name for scripts etc.
+PDIR=$3     # Third argument is Plugin installation folder
+PVERSION=$4 # Fourth argument is Plugin version
+LBHOMEDIR=$5 # Fifth argument is LoxBerry home directory
+PTEMPPATH=$6 # Sixth argument is full temp path during install
 
 # Read LoxBerry environment
 . $LBHOMEDIR/libs/bashlib/loxberry_log.sh
 . $LBHOMEDIR/libs/bashlib/loxberry_system.sh
 
-PACKAGE=$ARGV2
-PLUGINNAME=${PACKAGE}
+PACKAGE=$PSHNAME
+PLUGINNAME=$PDIR
 LOGDIR=$LBHOMEDIR/log/plugins/$PLUGINNAME
-PLUGINDIR=$ARGV1
+PLUGINDIR=$PTEMPDIR
 
 # Create temp logfile
 LOGFILE=$LOGDIR/preupgrade.log
