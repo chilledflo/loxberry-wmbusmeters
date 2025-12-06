@@ -11,8 +11,12 @@ PVERSION=$4 # Fourth argument is Plugin version
 LBHOMEDIR=$5 # Fifth argument is LoxBerry home directory
 PTEMPPATH=$6 # Sixth argument is full temp path during install
 
-# Load LoxBerry environment
-. $LBHOMEDIR/libs/bashlib/loxberry_system.sh
+# Load LoxBerry environment - try multiple possible paths
+if [ -f "$LBHOMEDIR/libs/bashlib/loxberry_system.sh" ]; then
+    . $LBHOMEDIR/libs/bashlib/loxberry_system.sh
+elif [ -f "$LBHOMEDIR/system/bashlib/loxberry_system.sh" ]; then
+    . $LBHOMEDIR/system/bashlib/loxberry_system.sh
+fi
 
 # Define plugin paths - LoxBerry provides these after sourcing
 PCONFIG=$LBPCONFIG/$PDIR
@@ -54,11 +58,13 @@ echo "<INFO> Installing dependencies..."
 
 # Update package lists
 echo "<INFO> Running apt-get update..."
-sudo apt-get update 2>&1 | tee -a $LOGFILE
+export DEBIAN_FRONTEND=noninteractive
+sudo -E apt-get update 2>&1 | tee -a $LOGFILE
 
 # Install required packages
 echo "<INFO> Installing build dependencies..."
-sudo apt-get install -y \
+export DEBIAN_FRONTEND=noninteractive
+sudo -E apt-get install -y \
     build-essential \
     git \
     cmake \
@@ -66,7 +72,6 @@ sudo apt-get install -y \
     librtlsdr-dev \
     libusb-1.0-0-dev \
     mosquitto-clients \
-    nc \
     wget \
     curl 2>&1 | tee -a $LOGFILE
 

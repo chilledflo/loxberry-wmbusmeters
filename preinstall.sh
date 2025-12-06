@@ -11,9 +11,14 @@ PVERSION=$4 # Fourth argument is Plugin version
 LBHOMEDIR=$5 # Fifth argument is LoxBerry home directory
 PTEMPPATH=$6 # Sixth argument is full temp path during install
 
-# Read LoxBerry environment
-. $LBHOMEDIR/libs/bashlib/loxberry_log.sh
-. $LBHOMEDIR/libs/bashlib/loxberry_system.sh
+# Read LoxBerry environment - try multiple possible paths
+if [ -f "$LBHOMEDIR/libs/bashlib/loxberry_log.sh" ]; then
+    . $LBHOMEDIR/libs/bashlib/loxberry_log.sh
+    . $LBHOMEDIR/libs/bashlib/loxberry_system.sh
+elif [ -f "$LBHOMEDIR/system/bashlib/loxberry_log.sh" ]; then
+    . $LBHOMEDIR/system/bashlib/loxberry_log.sh
+    . $LBHOMEDIR/system/bashlib/loxberry_system.sh
+fi
 
 PACKAGE=$PSHNAME
 PLUGINNAME=$PDIR
