@@ -82,68 +82,50 @@ else
     echo "<INFO> Architecture: $ARCH"
     echo "<INFO> Download URL: $DOWNLOAD_URL"
     
-    # Try Debian package first (most reliable)
-    echo "<INFO> Downloading Debian package..."
+    # Download static binary from GitHub releases
+    echo "<INFO> Downloading static binary from GitHub releases..."
     cd /tmp
     
-    # Try different package sources
-    PACKAGE_URLS=(
-        "http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_latest_amd64.deb"
-        "https://github.com/wmbusmeters/wmbusmeters/releases/download/1.17.1/wmbusmeters_1.17.1_amd64.deb"
-        "https://github.com/wmbusmeters/wmbusmeters/releases/latest/download/wmbusmeters_amd64.deb"
+    # Get latest release info and download static binary
+    BINARY_URLS=(
+        "https://github.com/wmbusmeters/wmbusmeters/releases/download/1.19.0/wmbusmeters"
+        "https://github.com/wmbusmeters/wmbusmeters/releases/download/1.18.0/wmbusmeters"
+        "https://github.com/weetmuts/wmbusmeters/releases/download/1.17.1/wmbusmeters"
     )
     
     DOWNLOAD_SUCCESS=false
-    for PACKAGE_URL in "${PACKAGE_URLS[@]}"; do
-        echo "<INFO> Trying: $PACKAGE_URL"
-        if wget -v "$PACKAGE_URL" -O wmbusmeters.deb 2>&1 | tee -a $LOGFILE; then
-            if [ -f wmbusmeters.deb ] && [ -s wmbusmeters.deb ]; then
-                DOWNLOAD_SUCCESS=true
-                echo "<OK> Package downloaded successfully"
-                break
-            fi
-        fi
-        rm -f wmbusmeters.deb
-    done
-    
-    if [ "$DOWNLOAD_SUCCESS" = true ]; then
-        echo "<INFO> Package size: $(ls -lh wmbusmeters.deb | awk '{print $5}')"
-            echo "<INFO> Extracting binary from package..."
-            
-            # Extract package
-            ar x wmbusmeters.deb 2>&1 | tee -a $LOGFILE
-            tar xf data.tar.xz 2>&1 | tee -a $LOGFILE
-            
-            if [ -f usr/bin/wmbusmeters ]; then
-                cp -v usr/bin/wmbusmeters "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE
+    for BINARY_URL in "${BINARY_URLS[@]}"; do
+        echo "<INFO> Trying: $BINARY_URL"
+        if wget -v "$BINARY_URL" -O "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE; then
+            if [ -f "$PBIN/wmbusmeters" ] && [ -s "$PBIN/wmbusmeters" ]; then
                 chmod +x "$PBIN/wmbusmeters"
                 
-                # Verify it works
+                # Test if it works
                 if "$PBIN/wmbusmeters" --version &> /dev/null; then
                     VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
                     echo "<OK> WMBusMeters installed: $VERSION"
                     echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
+                    DOWNLOAD_SUCCESS=true
+                    break
                 else
-                    echo "<WARN> Binary extracted but not functional"
-                    echo "<INFO> Trying to install dependencies..."
-                    # Check what's missing
+                    echo "<WARN> Binary downloaded but not functional, checking dependencies..."
                     ldd "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE || true
-                    echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
+                    file "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE
+                    # Try next URL
+                    rm -f "$PBIN/wmbusmeters"
                 fi
-            else
-                echo "<FAIL> Binary not found in package"
-                echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
             fi
-            
-        # Cleanup
-        rm -rf wmbusmeters.deb control.tar.* data.tar.* debian-binary usr etc 2>/dev/null || true
-    else
-        echo "<FAIL> Could not download package from any source"
+        fi
+        rm -f "$PBIN/wmbusmeters"
+    done
+    
+    if [ "$DOWNLOAD_SUCCESS" = false ]; then
+        echo "<FAIL> Could not download working binary from any source"
         echo "<INFO> Tried multiple URLs:"
-        for url in "${PACKAGE_URLS[@]}"; do
+        for url in "${BINARY_URLS[@]}"; do
             echo "<INFO>   - $url"
         done
-        echo "<INFO> Check internet connection and repository availability"
+        echo "<INFO> Check internet connection and GitHub availability"
         echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
     fi
 fi
