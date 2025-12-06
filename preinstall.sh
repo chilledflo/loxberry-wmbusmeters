@@ -35,10 +35,12 @@ exec > >(tee -a $LOGFILE) 2>&1
 echo "<INFO> Preinstall script started for $PLUGINNAME"
 echo "<INFO> Plugin directory: $PLUGINDIR"
 echo "<INFO> Temp directory: $PTEMPDIR"
+echo "<INFO> Temp path: $PTEMPPATH"
 echo "<INFO> Plugin name: $PSHNAME"
 echo "<INFO> Plugin folder: $PDIR"
 echo "<INFO> Plugin version: $PVERSION"
 echo "<INFO> LoxBerry home: $LBHOMEDIR"
+echo "<INFO> Current working directory: $(pwd)"
 
 # Check system requirements
 echo "<INFO> Checking system requirements..."
@@ -51,14 +53,23 @@ if [ $FREESPACE -lt 100 ]; then
     exit 1
 fi
 
-# Check if install.sh exists
-if [ -f "$PTEMPDIR/install.sh" ]; then
-    echo "<OK> install.sh found in temp directory"
-    ls -la "$PTEMPDIR/install.sh"
+# Try to find the actual temp path
+echo "<INFO> Searching for install.sh..."
+if [ -f "$PTEMPPATH/install.sh" ]; then
+    echo "<OK> install.sh found at: $PTEMPPATH/install.sh"
+    ls -la "$PTEMPPATH/install.sh"
+elif [ -f "$LBHOMEDIR/system/tmpfs/$PTEMPDIR/install.sh" ]; then
+    echo "<OK> install.sh found at: $LBHOMEDIR/system/tmpfs/$PTEMPDIR/install.sh"
+    ls -la "$LBHOMEDIR/system/tmpfs/$PTEMPDIR/install.sh"
+elif [ -f "/tmp/$PTEMPDIR/install.sh" ]; then
+    echo "<OK> install.sh found at: /tmp/$PTEMPDIR/install.sh"
+    ls -la "/tmp/$PTEMPDIR/install.sh"
 else
-    echo "<ERROR> install.sh NOT found in $PTEMPDIR"
-    echo "<INFO> Contents of temp directory:"
-    ls -la "$PTEMPDIR/"
+    echo "<WARN> install.sh NOT found in expected locations"
+    echo "<INFO> Checking common temp directories:"
+    ls -la "$LBHOMEDIR/system/tmpfs/" 2>&1 | grep -i "$PTEMPDIR" || echo "Not in system/tmpfs"
+    ls -la "/tmp/" 2>&1 | grep -i "$PTEMPDIR" || echo "Not in /tmp"
+    find /tmp -name "install.sh" -type f 2>/dev/null | head -5
 fi
 
 echo "<OK> Preinstall checks passed"
