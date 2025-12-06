@@ -45,17 +45,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 exec("systemctl is-active wmbusmeters 2>&1", $status_output, $status_return);
 $is_running = ($status_return === 0 && trim($status_output[0]) === 'active');
 
-// Get version - try multiple locations
+// Check if WMBusMeters is installed
 $version = "Nicht installiert";
+$wmbusmeters_installed = false;
+$setup_script = $lbpdatadir . "/setup-wmbusmeters.sh";
+
 if (file_exists("/usr/local/bin/wmbusmeters")) {
     exec("/usr/local/bin/wmbusmeters --version 2>&1", $version_output, $version_return);
     if ($version_return === 0 && isset($version_output[0])) {
         $version = trim($version_output[0]);
+        $wmbusmeters_installed = true;
     }
 } elseif (file_exists("/usr/bin/wmbusmeters")) {
     exec("/usr/bin/wmbusmeters --version 2>&1", $version_output, $version_return);
     if ($version_return === 0 && isset($version_output[0])) {
         $version = trim($version_output[0]);
+        $wmbusmeters_installed = true;
     }
 } else {
     exec("which wmbusmeters 2>&1", $which_output);
@@ -63,6 +68,7 @@ if (file_exists("/usr/local/bin/wmbusmeters")) {
         exec(trim($which_output[0]) . " --version 2>&1", $version_output, $version_return);
         if ($version_return === 0 && isset($version_output[0])) {
             $version = trim($version_output[0]);
+            $wmbusmeters_installed = true;
         }
     }
 }
@@ -82,11 +88,29 @@ table th { background-color: #f8f9fa; font-weight: bold; }
 
 <h1>WMBusMeters Dashboard</h1>
 
+<?php if (!$wmbusmeters_installed): ?>
+<div class="warning-box">
+    <h3>⚠️ Installation nicht abgeschlossen</h3>
+    <p><strong>WMBusMeters ist noch nicht installiert.</strong></p>
+    <p>Bitte führen Sie folgenden Befehl als root aus, um die Installation abzuschließen:</p>
+    <div style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; margin: 10px 0;">
+        sudo <?php echo htmlspecialchars($setup_script); ?>
+    </div>
+    <p><small>Sie können sich per SSH verbinden oder die LoxBerry Console verwenden.</small></p>
+    <?php if (file_exists($setup_script)): ?>
+        <p><small>✓ Setup-Skript vorhanden: <?php echo htmlspecialchars($setup_script); ?></small></p>
+    <?php else: ?>
+        <p style="color: red;"><strong>✗ Fehler: Setup-Skript nicht gefunden!</strong></p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if ($message): ?>
 <div class="info-box"><?php echo htmlspecialchars($message); ?></div>
 <?php endif; ?>
 
 <h2>Service Status</h2>
+<?php if ($wmbusmeters_installed): ?>
 <div class="status-box <?php echo $is_running ? 'status-running' : 'status-stopped'; ?>">
     <strong>Status:</strong> <?php echo $is_running ? '● Läuft' : '○ Gestoppt'; ?>
 </div>
@@ -102,6 +126,11 @@ table th { background-color: #f8f9fa; font-weight: bold; }
         Neustart
     </button>
 </form>
+<?php else: ?>
+<div class="status-box status-stopped">
+    <strong>Status:</strong> ○ Nicht installiert - Bitte Setup-Skript ausführen
+</div>
+<?php endif; ?>
 
 <h2>System Information</h2>
 <table>
