@@ -64,82 +64,109 @@ if command -v wmbusmeters &> /dev/null; then
     echo "<INFO> Binary at: $WMBUSMETERS_BIN"
     echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
 else
-    # Download and install pre-built binary
-    echo "<INFO> Downloading pre-built WMBusMeters binary..."
+    # GitHub releases contain no pre-built binaries - we must compile from source
+    echo "<INFO> Compiling WMBusMeters from source (GitHub has no pre-built binaries)..."
     
-    # Determine architecture
-    ARCH=$(uname -m)
-    if [ "$ARCH" = "x86_64" ]; then
-        DOWNLOAD_URL="https://github.com/wmbusmeters/wmbusmeters/releases/latest/download/wmbusmeters_amd64"
-    elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "armv7l" ]; then
-        DOWNLOAD_URL="https://github.com/wmbusmeters/wmbusmeters/releases/latest/download/wmbusmeters_arm"
-    else
-        echo "<WARN> Unknown architecture: $ARCH"
-        echo "<INFO> Trying generic x86_64 binary..."
-        DOWNLOAD_URL="https://github.com/wmbusmeters/wmbusmeters/releases/latest/download/wmbusmeters_amd64"
-    fi
-    
-    echo "<INFO> Architecture: $ARCH"
-    echo "<INFO> Download URL: $DOWNLOAD_URL"
-    
-    # Download static binary from GitHub releases
-    echo "<INFO> Downloading static binary from GitHub releases..."
-    cd /tmp
-    
-    # Get latest release info and download static binary
-    BINARY_URLS=(
-        "https://github.com/wmbusmeters/wmbusmeters/releases/download/1.19.0/wmbusmeters"
-        "https://github.com/wmbusmeters/wmbusmeters/releases/download/1.18.0/wmbusmeters"
-        "https://github.com/weetmuts/wmbusmeters/releases/download/1.17.1/wmbusmeters"
-    )
-    
-    DOWNLOAD_SUCCESS=false
-    for BINARY_URL in "${BINARY_URLS[@]}"; do
-        echo "<INFO> Trying: $BINARY_URL"
-        if wget -v "$BINARY_URL" -O "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE; then
-            if [ -f "$PBIN/wmbusmeters" ] && [ -s "$PBIN/wmbusmeters" ]; then
-                chmod +x "$PBIN/wmbusmeters"
-                
-                # Test if it works
-                if "$PBIN/wmbusmeters" --version &> /dev/null; then
-                    VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
-                    echo "<OK> WMBusMeters installed: $VERSION"
-                    echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
-                    DOWNLOAD_SUCCESS=true
-                    break
-                else
-                    echo "<WARN> Binary downloaded but not functional, checking dependencies..."
-                    ldd "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE || true
-                    file "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE
-                    # Try next URL
-                    rm -f "$PBIN/wmbusmeters"
-                fi
-            fi
+    # Check if required system tools are available
+    MISSING_TOOLS=""
+    for tool in g++ make wget unzip; do
+        if ! command -v $tool &> /dev/null; then
+            MISSING_TOOLS="$MISSING_TOOLS $tool"
         fi
-        rm -f "$PBIN/wmbusmeters"
     done
     
-    if [ "$DOWNLOAD_SUCCESS" = false ]; then
-        echo "<FAIL> Could not download working binary from any source"
-        echo "<INFO> Tried multiple URLs:"
-        for url in "${BINARY_URLS[@]}"; do
-            echo "<INFO>   - $url"
-        done
-        echo "<INFO> Check internet connection and GitHub availability"
+    if [ -n "$MISSING_TOOLS" ]; then
+        echo "<FAIL> Required build tools not available:$MISSING_TOOLS"
+        echo "<FAIL> Cannot compile without: g++, make, wget, unzip"
+        echo "<FAIL> These must be installed system-wide (requires sudo/root access)"
+        echo "<INFO> Manual installation required:"
+        echo "<INFO> 1. SSH to LoxBerry as root"
+        echo "<INFO> 2. Run: apt-get update && apt-get install -y g++ make librtlsdr-dev rtl-sdr"
+        echo "<INFO> 3. Reinstall this plugin"
         echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+        WMBUSMETERS_BIN="NOT_INSTALLED"
+    else
+        # Download and compile wmbusmeters
+        echo "<INFO> Build tools available, proceeding with compilation..."
+        cd /tmp
+        
+        # Try multiple versions
+        VERSIONS=("1.19.0" "1.18.0" "1.17.1")
+        COMPILE_SUCCESS=false
+        
+        for VERSION in "${VERSIONS[@]}"; do
+            echo "<INFO> Trying to compile version $VERSION..."
+            
+            # Clean up previous attempt
+            rm -rf wmbusmeters-$VERSION wmbusmeters.zip
+            
+            # Download source
+            if wget -q "https://github.com/wmbusmeters/wmbusmeters/archive/refs/tags/$VERSION.zip" -O wmbusmeters.zip; then
+                echo "<INFO> Downloaded source code v$VERSION"
+                
+                if unzip -q wmbusmeters.zip; then
+                    cd wmbusmeters-$VERSION 2>/dev/null || cd wmbusmeters-$VERSION 2>/dev/null || continue
+                    
+                    # Compile (make only the binary, skip tests)
+                    echo "<INFO> Compiling wmbusmeters (this may take 2-3 minutes)..."
+                    if make wmbusmeters 2>&1 | tee -a $LOGFILE; then
+                        if [ -f "wmbusmeters" ] && [ -x "wmbusmeters" ]; then
+                            # Test if it works
+                            if ./wmbusmeters --version &> /dev/null; then
+                                # Copy to plugin bin directory
+                                cp wmbusmeters "$PBIN/wmbusmeters"
+                                chmod +x "$PBIN/wmbusmeters"
+                                
+                                INSTALLED_VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
+                                echo "<OK> WMBusMeters compiled successfully: $INSTALLED_VERSION"
+                                echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
+                                WMBUSMETERS_BIN="$PBIN/wmbusmeters"
+                                COMPILE_SUCCESS=true
+                                break
+                            else
+                                echo "<WARN> Binary compiled but doesn't work, trying next version..."
+                            fi
+                        fi
+                    else
+                        echo "<WARN> Compilation failed for v$VERSION, trying next version..."
+                    fi
+                    
+                    cd /tmp
+                fi
+            fi
+        done
+        
+        # Clean up
+        cd /tmp
+        rm -rf wmbusmeters-* wmbusmeters.zip
+        
+        if [ "$COMPILE_SUCCESS" = false ]; then
+            echo "<FAIL> Could not compile any version successfully"
+            echo "<FAIL> Tried versions: ${VERSIONS[*]}"
+            echo "<INFO> Check installation log for compilation errors"
+            echo "<INFO> Manual installation may be required"
+            echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+            WMBUSMETERS_BIN="NOT_INSTALLED"
+        fi
     fi
 fi
 
 # Final status check
-if command -v wmbusmeters &> /dev/null; then
+if [ -f "$PBIN/wmbusmeters" ] && [ -x "$PBIN/wmbusmeters" ]; then
+    INSTALLED_VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
+    echo "<OK> WMBusMeters ready: $INSTALLED_VERSION"
+    echo "<OK> Binary location: $PBIN/wmbusmeters"
+    WMBUSMETERS_BIN="$PBIN/wmbusmeters"
+elif command -v wmbusmeters &> /dev/null; then
     INSTALLED_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
     WMBUSMETERS_BIN=$(which wmbusmeters)
     echo "<OK> WMBusMeters ready: $INSTALLED_VERSION"
     echo "<OK> Binary location: $WMBUSMETERS_BIN"
 else
-    echo "<INFO> WMBusMeters not yet installed"
-    echo "<INFO> Run the setup script to complete installation:"
-    echo "<INFO> sudo $PDATA/setup-wmbusmeters.sh"
+    echo "<FAIL> WMBusMeters installation failed"
+    echo "<INFO> See log above for details"
+    echo "<INFO> Build tools required: g++, make, librtlsdr-dev, rtl-sdr"
+    echo "<INFO> Install with: apt-get install -y g++ make librtlsdr-dev rtl-sdr"
     WMBUSMETERS_BIN="NOT_INSTALLED"
 fi
 
