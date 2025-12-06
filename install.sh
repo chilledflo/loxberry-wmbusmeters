@@ -86,11 +86,28 @@ else
     echo "<INFO> Downloading Debian package..."
     cd /tmp
     
-    if wget -v http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_1.17.1-1_amd64.deb -O wmbusmeters.deb 2>&1 | tee -a $LOGFILE; then
-        echo "<OK> Package downloaded"
-        
-        if [ -f wmbusmeters.deb ] && [ -s wmbusmeters.deb ]; then
-            echo "<INFO> Package size: $(ls -lh wmbusmeters.deb | awk '{print $5}')"
+    # Try different package sources
+    PACKAGE_URLS=(
+        "http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_latest_amd64.deb"
+        "https://github.com/wmbusmeters/wmbusmeters/releases/download/1.17.1/wmbusmeters_1.17.1_amd64.deb"
+        "https://github.com/wmbusmeters/wmbusmeters/releases/latest/download/wmbusmeters_amd64.deb"
+    )
+    
+    DOWNLOAD_SUCCESS=false
+    for PACKAGE_URL in "${PACKAGE_URLS[@]}"; do
+        echo "<INFO> Trying: $PACKAGE_URL"
+        if wget -v "$PACKAGE_URL" -O wmbusmeters.deb 2>&1 | tee -a $LOGFILE; then
+            if [ -f wmbusmeters.deb ] && [ -s wmbusmeters.deb ]; then
+                DOWNLOAD_SUCCESS=true
+                echo "<OK> Package downloaded successfully"
+                break
+            fi
+        fi
+        rm -f wmbusmeters.deb
+    done
+    
+    if [ "$DOWNLOAD_SUCCESS" = true ]; then
+        echo "<INFO> Package size: $(ls -lh wmbusmeters.deb | awk '{print $5}')"
             echo "<INFO> Extracting binary from package..."
             
             # Extract package
@@ -118,14 +135,14 @@ else
                 echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
             fi
             
-            # Cleanup
-            rm -rf wmbusmeters.deb control.tar.* data.tar.* debian-binary usr etc 2>/dev/null || true
-        else
-            echo "<FAIL> Downloaded file is empty or corrupt"
-            echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
-        fi
+        # Cleanup
+        rm -rf wmbusmeters.deb control.tar.* data.tar.* debian-binary usr etc 2>/dev/null || true
     else
-        echo "<FAIL> Could not download package"
+        echo "<FAIL> Could not download package from any source"
+        echo "<INFO> Tried multiple URLs:"
+        for url in "${PACKAGE_URLS[@]}"; do
+            echo "<INFO>   - $url"
+        done
         echo "<INFO> Check internet connection and repository availability"
         echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
     fi
