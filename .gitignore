@@ -33,7 +33,7 @@ log/*
 *.so
 *.a
 
-# Archive files
-*.zip
+# Archive files (keep release zips)
+# *.zip
 *.tar.gz
 *.tar.bz2
