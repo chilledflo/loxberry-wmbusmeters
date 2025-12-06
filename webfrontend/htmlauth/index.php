@@ -13,9 +13,12 @@ $navbar[3]['URL'] = "log.php";
 
 LBWeb::lbheader($pluginname, "", "");
 
-$plugindir = $lbpplugindir;
-$configdir = $lbpconfigdir;
-$configfile = "$configdir/wmbusmeters.conf";
+// Get LoxBerry system paths
+$plugindata = LBSystem::plugindata();
+$configfile = $lbpconfigdir . "/wmbusmeters.conf";
+
+// Debug: Log the config path
+error_log("WMBusMeters: Looking for config at: " . $configfile);
 
 // Handle form submissions
 $message = "";

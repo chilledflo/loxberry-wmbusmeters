@@ -12,11 +12,9 @@ LBHOMEDIR=$5 # Fifth argument is LoxBerry home directory
 PTEMPPATH=$6 # Sixth argument is full temp path during install
 
 # Load LoxBerry environment
-if [ -f /etc/environment ]; then
-    . /etc/environment
-fi
+. $LBHOMEDIR/libs/bashlib/loxberry_system.sh
 
-# Define plugin paths using LoxBerry variables
+# Define plugin paths - LoxBerry provides these after sourcing
 PCONFIG=$LBPCONFIG/$PDIR
 PDATA=$LBPDATA/$PDIR
 PLOG=$LBPLOG/$PDIR
@@ -34,6 +32,10 @@ echo "<INFO> Installation script started for $PSHNAME"
 echo "<INFO> Plugin directory: $PDIR"
 echo "<INFO> LoxBerry home: $LBHOMEDIR"
 echo "<INFO> Temp directory: $PTEMPDIR"
+echo "<INFO> Config directory will be: $PCONFIG"
+echo "<INFO> Data directory will be: $PDATA"
+echo "<INFO> Binary directory will be: $PBIN"
+echo "<INFO> Log directory will be: $PLOG"
 
 # Create necessary directories
 echo "<INFO> Creating plugin directories..."
@@ -97,7 +99,7 @@ INSTALLED_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
 echo "<OK> wmbusmeters installed successfully: $INSTALLED_VERSION"
 
 # Create default configuration
-echo "<INFO> Creating default configuration..."
+echo "<INFO> Creating default configuration at $PCONFIG/wmbusmeters.conf"
 cat > $PCONFIG/wmbusmeters.conf << 'EOF'
 # WMBusmeters Configuration File
 # See https://github.com/wmbusmeters/wmbusmeters for documentation
@@ -118,8 +120,17 @@ logfile=/var/log/wmbusmeters/wmbusmeters.log
 # key=00112233445566778899AABBCCDDEEFF
 EOF
 
+if [ -f "$PCONFIG/wmbusmeters.conf" ]; then
+    echo "<OK> Configuration file created successfully"
+    ls -la $PCONFIG/wmbusmeters.conf
+else
+    echo "<FAIL> Failed to create configuration file"
+    exit 1
+fi
+
 # Create systemd service file
-echo "<INFO> Creating systemd service..."
+CONFPATH="$PCONFIG/wmbusmeters.conf"
+echo "<INFO> Creating systemd service with config path: $CONFPATH"
 cat > /etc/systemd/system/wmbusmeters.service << EOFSERVICE
 [Unit]
 Description=WMBus Meters Service
@@ -130,7 +141,7 @@ Documentation=https://github.com/wmbusmeters/wmbusmeters
 Type=simple
 User=loxberry
 Group=loxberry
-ExecStart=/usr/bin/wmbusmeters --useconfig=$PCONFIG/wmbusmeters.conf
+ExecStart=/usr/bin/wmbusmeters --useconfig=$CONFPATH
 Restart=always
 RestartSec=10
 
@@ -138,7 +149,13 @@ RestartSec=10
 WantedBy=multi-user.target
 EOFSERVICE
 
-echo "<INFO> Systemd service created with config: $PCONFIG/wmbusmeters.conf"
+if [ -f "/etc/systemd/system/wmbusmeters.service" ]; then
+    echo "<OK> Systemd service created successfully"
+    cat /etc/systemd/system/wmbusmeters.service
+else
+    echo "<FAIL> Failed to create systemd service"
+    exit 1
+fi
 
 # Create log directory for wmbusmeters
 mkdir -p /var/log/wmbusmeters
