@@ -82,64 +82,52 @@ else
     echo "<INFO> Architecture: $ARCH"
     echo "<INFO> Download URL: $DOWNLOAD_URL"
     
-    # Download to plugin bin directory
-    if wget -q -O "$PBIN/wmbusmeters" "$DOWNLOAD_URL"; then
-        chmod +x "$PBIN/wmbusmeters"
-        echo "<OK> Binary downloaded successfully"
+    # Try Debian package first (most reliable)
+    echo "<INFO> Downloading Debian package..."
+    cd /tmp
+    
+    if wget -v http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_1.17.1-1_amd64.deb -O wmbusmeters.deb 2>&1 | tee -a $LOGFILE; then
+        echo "<OK> Package downloaded"
         
-        # Test if it works
-        if "$PBIN/wmbusmeters" --version &> /dev/null; then
-            VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
-            echo "<OK> WMBusMeters installed: $VERSION"
-            echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
-        else
-            echo "<WARN> Binary downloaded but not executable - trying to build from source..."
-            rm -f "$PBIN/wmbusmeters"
+        if [ -f wmbusmeters.deb ] && [ -s wmbusmeters.deb ]; then
+            echo "<INFO> Package size: $(ls -lh wmbusmeters.deb | awk '{print $5}')"
+            echo "<INFO> Extracting binary from package..."
             
-            # Fallback: Try to download Debian package and extract
-            echo "<INFO> Attempting to download Debian package..."
-            cd /tmp
-            wget -q http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_1.17.1-1_amd64.deb -O wmbusmeters.deb || true
+            # Extract package
+            ar x wmbusmeters.deb 2>&1 | tee -a $LOGFILE
+            tar xf data.tar.xz 2>&1 | tee -a $LOGFILE
             
-            if [ -f wmbusmeters.deb ]; then
-                echo "<INFO> Extracting binary from package..."
-                ar x wmbusmeters.deb
-                tar xf data.tar.xz
-                if [ -f usr/bin/wmbusmeters ]; then
-                    cp usr/bin/wmbusmeters "$PBIN/wmbusmeters"
-                    chmod +x "$PBIN/wmbusmeters"
-                    echo "<OK> Binary extracted from package"
+            if [ -f usr/bin/wmbusmeters ]; then
+                cp -v usr/bin/wmbusmeters "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE
+                chmod +x "$PBIN/wmbusmeters"
+                
+                # Verify it works
+                if "$PBIN/wmbusmeters" --version &> /dev/null; then
+                    VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
+                    echo "<OK> WMBusMeters installed: $VERSION"
+                    echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
+                else
+                    echo "<WARN> Binary extracted but not functional"
+                    echo "<INFO> Trying to install dependencies..."
+                    # Check what's missing
+                    ldd "$PBIN/wmbusmeters" 2>&1 | tee -a $LOGFILE || true
                     echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
                 fi
-                # Cleanup
-                rm -rf wmbusmeters.deb control.tar.xz data.tar.xz debian-binary usr
             else
-                echo "<FAIL> Could not download package"
+                echo "<FAIL> Binary not found in package"
                 echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
             fi
-        fi
-    else
-        echo "<WARN> Download failed, trying Debian package..."
-        cd /tmp
-        wget -q http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_1.17.1-1_amd64.deb -O wmbusmeters.deb || true
-        
-        if [ -f wmbusmeters.deb ]; then
-            echo "<INFO> Extracting binary from package..."
-            ar x wmbusmeters.deb
-            tar xf data.tar.xz
-            if [ -f usr/bin/wmbusmeters ]; then
-                cp usr/bin/wmbusmeters "$PBIN/wmbusmeters"
-                chmod +x "$PBIN/wmbusmeters"
-                VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
-                echo "<OK> Binary extracted: $VERSION"
-                echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
-            fi
+            
             # Cleanup
-            rm -rf wmbusmeters.deb control.tar.xz data.tar.xz debian-binary usr
+            rm -rf wmbusmeters.deb control.tar.* data.tar.* debian-binary usr etc 2>/dev/null || true
         else
-            echo "<FAIL> Could not install WMBusMeters"
+            echo "<FAIL> Downloaded file is empty or corrupt"
             echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
         fi
+    else
+        echo "<FAIL> Could not download package"
+        echo "<INFO> Check internet connection and repository availability"
+        echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
     fi
 fi
 

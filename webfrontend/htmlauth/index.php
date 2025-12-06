@@ -48,27 +48,34 @@ $is_running = ($status_return === 0 && trim($status_output[0]) === 'active');
 // Check if WMBusMeters is installed
 $version = "Nicht installiert";
 $wmbusmeters_installed = false;
-$setup_script = $lbpdatadir . "/setup-wmbusmeters.sh";
+$wmbusmeters_bin = "";
 
-if (file_exists("/usr/local/bin/wmbusmeters")) {
-    exec("/usr/local/bin/wmbusmeters --version 2>&1", $version_output, $version_return);
+// Check plugin bin directory first
+$plugin_bin = $lbpbindir . "/wmbusmeters";
+if (file_exists($plugin_bin)) {
+    exec($plugin_bin . " --version 2>&1", $version_output, $version_return);
     if ($version_return === 0 && isset($version_output[0])) {
         $version = trim($version_output[0]);
         $wmbusmeters_installed = true;
+        $wmbusmeters_bin = $plugin_bin;
     }
-} elseif (file_exists("/usr/bin/wmbusmeters")) {
-    exec("/usr/bin/wmbusmeters --version 2>&1", $version_output, $version_return);
-    if ($version_return === 0 && isset($version_output[0])) {
-        $version = trim($version_output[0]);
-        $wmbusmeters_installed = true;
-    }
-} else {
-    exec("which wmbusmeters 2>&1", $which_output);
-    if (!empty($which_output[0]) && file_exists(trim($which_output[0]))) {
-        exec(trim($which_output[0]) . " --version 2>&1", $version_output, $version_return);
+}
+
+// Check system locations if not in plugin dir
+if (!$wmbusmeters_installed) {
+    if (file_exists("/usr/local/bin/wmbusmeters")) {
+        exec("/usr/local/bin/wmbusmeters --version 2>&1", $version_output, $version_return);
         if ($version_return === 0 && isset($version_output[0])) {
             $version = trim($version_output[0]);
             $wmbusmeters_installed = true;
+            $wmbusmeters_bin = "/usr/local/bin/wmbusmeters";
+        }
+    } elseif (file_exists("/usr/bin/wmbusmeters")) {
+        exec("/usr/bin/wmbusmeters --version 2>&1", $version_output, $version_return);
+        if ($version_return === 0 && isset($version_output[0])) {
+            $version = trim($version_output[0]);
+            $wmbusmeters_installed = true;
+            $wmbusmeters_bin = "/usr/bin/wmbusmeters";
         }
     }
 }
@@ -90,18 +97,25 @@ table th { background-color: #f8f9fa; font-weight: bold; }
 
 <?php if (!$wmbusmeters_installed): ?>
 <div class="warning-box">
-    <h3>⚠️ Installation nicht abgeschlossen</h3>
-    <p><strong>WMBusMeters ist noch nicht installiert.</strong></p>
-    <p>Bitte führen Sie folgenden Befehl als root aus, um die Installation abzuschließen:</p>
-    <div style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; margin: 10px 0;">
-        sudo <?php echo htmlspecialchars($setup_script); ?>
-    </div>
-    <p><small>Sie können sich per SSH verbinden oder die LoxBerry Console verwenden.</small></p>
-    <?php if (file_exists($setup_script)): ?>
-        <p><small>✓ Setup-Skript vorhanden: <?php echo htmlspecialchars($setup_script); ?></small></p>
-    <?php else: ?>
-        <p style="color: red;"><strong>✗ Fehler: Setup-Skript nicht gefunden!</strong></p>
-    <?php endif; ?>
+    <h3>⚠️ Installation fehlgeschlagen</h3>
+    <p><strong>WMBusMeters konnte nicht automatisch installiert werden.</strong></p>
+    <p>Mögliche Ursachen:</p>
+    <ul>
+        <li>Keine Internetverbindung während der Installation</li>
+        <li>GitHub oder OpenSUSE Repository nicht erreichbar</li>
+        <li>Inkompatible Architektur</li>
+    </ul>
+    <p><strong>Lösungen:</strong></p>
+    <ol>
+        <li>Plugin neu installieren (mit aktiver Internetverbindung)</li>
+        <li>Oder manuell installieren:
+            <div style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; margin: 10px 0;">
+                wget http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_1.17.1-1_amd64.deb<br>
+                sudo dpkg -i wmbusmeters_1.17.1-1_amd64.deb
+            </div>
+        </li>
+    </ol>
+    <p><small>Überprüfen Sie das Installations-Log für weitere Details.</small></p>
 </div>
 <?php endif; ?>
 
@@ -128,7 +142,7 @@ table th { background-color: #f8f9fa; font-weight: bold; }
 </form>
 <?php else: ?>
 <div class="status-box status-stopped">
-    <strong>Status:</strong> ○ Nicht installiert - Bitte Setup-Skript ausführen
+    <strong>Status:</strong> ○ Nicht installiert
 </div>
 <?php endif; ?>
 
@@ -141,6 +155,10 @@ table th { background-color: #f8f9fa; font-weight: bold; }
     <tr>
         <td>WMBusMeters Version</td>
         <td><?php echo htmlspecialchars($version); ?></td>
+    </tr>
+    <tr>
+        <td>Binary Pfad</td>
+        <td><?php echo $wmbusmeters_installed ? htmlspecialchars($wmbusmeters_bin) : '<span style="color: red;">Nicht installiert</span>'; ?></td>
     </tr>
     <tr>
         <td>Plugin Verzeichnis</td>
