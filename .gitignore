@@ -1,0 +1,39 @@
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Backup files
+*.backup
+*~
+
+# Plugin-specific
+config/*.conf.backup
+data/*
+log/*
+
+# Keep directory structure
+!data/.gitkeep
+!log/.gitkeep
+
+# Build artifacts
+*.o
+*.so
+*.a
+
+# Archive files
+*.zip
+*.tar.gz
+*.tar.bz2
