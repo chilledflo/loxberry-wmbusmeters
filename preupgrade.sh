@@ -17,7 +17,6 @@ if [ -f "$LBHOMEDIR/libs/bashlib/loxberry_system.sh" ]; then
 elif [ -f "$LBHOMEDIR/system/bashlib/loxberry_system.sh" ]; then
     . $LBHOMEDIR/system/bashlib/loxberry_system.sh
 fi
-. $LBHOMEDIR/libs/bashlib/loxberry_system.sh
 
 PACKAGE=$PSHNAME
 PLUGINNAME=$PDIR
