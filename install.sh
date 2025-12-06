@@ -53,9 +53,11 @@ chmod -R 775 $PCONFIG $PDATA $PBIN
 echo "<INFO> Installing dependencies..."
 
 # Update package lists
-apt-get update
+echo "<INFO> Running apt-get update..."
+apt-get update 2>&1 | tee -a $LOGFILE
 
 # Install required packages
+echo "<INFO> Installing build dependencies..."
 apt-get install -y \
     build-essential \
     git \
@@ -64,7 +66,13 @@ apt-get install -y \
     librtlsdr-dev \
     libusb-1.0-0-dev \
     mosquitto-clients \
-    nc
+    nc \
+    wget \
+    curl 2>&1 | tee -a $LOGFILE
+
+if [ $? -ne 0 ]; then
+    echo "<WARN> Some dependencies might have failed to install"
+fi
 
 echo "<INFO> Installing wmbusmeters..."
 
@@ -76,89 +84,107 @@ if command -v wmbusmeters &> /dev/null; then
     WMBUSMETERS_BIN=$(which wmbusmeters)
     echo "<INFO> Using existing installation at: $WMBUSMETERS_BIN"
 else
-    # Try to install from package repository first
-    echo "<INFO> Attempting to install wmbusmeters from package repository..."
+    # Manual build is more reliable on Raspberry Pi
+    echo "<INFO> Building wmbusmeters from source..."
     
-    # Add wmbusmeters repository if not already added
-    if [ ! -f /etc/apt/sources.list.d/wmbusmeters.list ]; then
-        echo "<INFO> Adding wmbusmeters repository..."
-        wget -q -O - https://weetmuts.github.io/wmbusmeters/wmbusmeters-pubkey.gpg | apt-key add - 2>&1 || echo "<WARN> Could not add GPG key"
-        echo "deb http://weetmuts.github.io/wmbusmeters buster main" > /etc/apt/sources.list.d/wmbusmeters.list 2>&1 || echo "<WARN> Could not add repository"
-        apt-get update 2>&1 || echo "<WARN> apt-get update failed"
-    fi
-    
-    # Try package installation
-    if apt-get install -y wmbusmeters 2>&1; then
-        echo "<OK> wmbusmeters installed from package"
-        WMBUSMETERS_BIN=$(which wmbusmeters)
-    else
-        echo "<WARN> Package installation failed, trying manual build..."
-        
-        # Clone and build wmbusmeters
-        cd /tmp
-        if [ -d "wmbusmeters" ]; then
-            rm -rf wmbusmeters
-        fi
-
-        echo "<INFO> Cloning wmbusmeters repository..."
-        if ! git clone https://github.com/wmbusmeters/wmbusmeters.git; then
-            echo "<FAIL> Failed to clone wmbusmeters repository"
-            exit 1
-        fi
-        cd wmbusmeters
-
-        echo "<INFO> Building wmbusmeters..."
-        if ! make; then
-            echo "<FAIL> Failed to build wmbusmeters"
-            exit 1
-        fi
-
-        echo "<INFO> Installing wmbusmeters..."
-        if ! make install; then
-            echo "<FAIL> Failed to install wmbusmeters"
-            exit 1
-        fi
-
-        # Update library cache
-        ldconfig
-
-        # Force rehash PATH
-        hash -r
-        
-        # Clean up
-        cd /tmp
+    # Clone and build wmbusmeters
+    cd /tmp
+    if [ -d "wmbusmeters" ]; then
+        echo "<INFO> Removing old build directory..."
         rm -rf wmbusmeters
     fi
+
+    echo "<INFO> Cloning wmbusmeters repository..."
+    if ! git clone https://github.com/wmbusmeters/wmbusmeters.git 2>&1 | tee -a $LOGFILE; then
+        echo "<FAIL> Failed to clone wmbusmeters repository"
+        echo "<INFO> Check internet connection and GitHub access"
+        exit 1
+    fi
+    
+    cd wmbusmeters
+    echo "<INFO> Current directory: $(pwd)"
+    echo "<INFO> Build files present:"
+    ls -la
+
+    echo "<INFO> Building wmbusmeters (this may take several minutes)..."
+    if ! make 2>&1 | tee -a $LOGFILE; then
+        echo "<FAIL> Failed to build wmbusmeters"
+        echo "<INFO> Check build log above for errors"
+        exit 1
+    fi
+    
+    echo "<INFO> Build completed, installing..."
+    if ! make install 2>&1 | tee -a $LOGFILE; then
+        echo "<FAIL> Failed to install wmbusmeters"
+        exit 1
+    fi
+
+    # Update library cache
+    echo "<INFO> Updating library cache..."
+    ldconfig 2>&1 | tee -a $LOGFILE
+
+    # Force rehash PATH
+    hash -r
+    
+    # Clean up
+    cd /tmp
+    rm -rf wmbusmeters
+    echo "<INFO> Cleaned up build directory"
+fi
 fi
 
 # Verify installation - check multiple locations
 echo "<INFO> Verifying wmbusmeters installation..."
+echo "<INFO> Checking PATH: $PATH"
+
+# Wait a moment for filesystem sync
+sleep 1
+
 if [ -z "$WMBUSMETERS_BIN" ]; then
-    if [ -f "/usr/local/bin/wmbusmeters" ]; then
-        WMBUSMETERS_BIN="/usr/local/bin/wmbusmeters"
-    elif [ -f "/usr/bin/wmbusmeters" ]; then
-        WMBUSMETERS_BIN="/usr/bin/wmbusmeters"
-    elif [ -f "/usr/sbin/wmbusmeters" ]; then
-        WMBUSMETERS_BIN="/usr/sbin/wmbusmeters"
-    else
-        echo "<FAIL> wmbusmeters binary not found after installation"
-        echo "<INFO> Searching for wmbusmeters..."
-        find / -name wmbusmeters -type f 2>/dev/null | head -10
-        exit 1
+    # Try which first
+    WMBUSMETERS_BIN=$(which wmbusmeters 2>/dev/null)
+    
+    # If which fails, try common locations
+    if [ -z "$WMBUSMETERS_BIN" ] || [ ! -f "$WMBUSMETERS_BIN" ]; then
+        echo "<INFO> which command failed, checking common locations..."
+        if [ -f "/usr/local/bin/wmbusmeters" ]; then
+            WMBUSMETERS_BIN="/usr/local/bin/wmbusmeters"
+        elif [ -f "/usr/bin/wmbusmeters" ]; then
+            WMBUSMETERS_BIN="/usr/bin/wmbusmeters"
+        elif [ -f "/usr/sbin/wmbusmeters" ]; then
+            WMBUSMETERS_BIN="/usr/sbin/wmbusmeters"
+        else
+            echo "<FAIL> wmbusmeters binary not found in common locations"
+            echo "<INFO> Searching entire system (this may take a moment)..."
+            SEARCH_RESULT=$(find /usr -name wmbusmeters -type f 2>/dev/null | head -1)
+            if [ -n "$SEARCH_RESULT" ]; then
+                echo "<INFO> Found at: $SEARCH_RESULT"
+                WMBUSMETERS_BIN="$SEARCH_RESULT"
+            else
+                echo "<FAIL> wmbusmeters not found anywhere"
+                echo "<INFO> Files in /usr/local/bin:"
+                ls -la /usr/local/bin/ 2>/dev/null | grep -i wmbus || echo "No wmbus files found"
+                exit 1
+            fi
+        fi
     fi
 fi
 
 echo "<OK> Found wmbusmeters at: $WMBUSMETERS_BIN"
+ls -la "$WMBUSMETERS_BIN"
 
 # Test the binary
-if ! $WMBUSMETERS_BIN --version &> /dev/null; then
+echo "<INFO> Testing wmbusmeters binary..."
+if ! "$WMBUSMETERS_BIN" --version &> /dev/null; then
     echo "<FAIL> wmbusmeters binary exists but cannot execute"
-    ls -la $WMBUSMETERS_BIN
-    file $WMBUSMETERS_BIN
+    echo "<INFO> File information:"
+    file "$WMBUSMETERS_BIN"
+    echo "<INFO> Permissions:"
+    ls -la "$WMBUSMETERS_BIN"
     exit 1
 fi
 
-INSTALLED_VERSION=$($WMBUSMETERS_BIN --version 2>&1 | head -n1)
+INSTALLED_VERSION=$("$WMBUSMETERS_BIN" --version 2>&1 | head -n1)
 echo "<OK> wmbusmeters installed successfully: $INSTALLED_VERSION"
 echo "<OK> Binary location: $WMBUSMETERS_BIN"
 
