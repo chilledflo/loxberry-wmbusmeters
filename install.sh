@@ -11,11 +11,18 @@ PVERSION=$4 # Fourth argument is Plugin version
 LBHOMEDIR=$5 # Fifth argument is LoxBerry home directory
 PTEMPPATH=$6 # Sixth argument is full temp path during install
 
-# Combine them with /etc/environment
-PLUGINDIR=$LBPDATA/$PDIR
+# Load LoxBerry environment
+if [ -f /etc/environment ]; then
+    . /etc/environment
+fi
+
+# Define plugin paths using LoxBerry variables
 PCONFIG=$LBPCONFIG/$PDIR
-PBIN=$LBPBIN/$PDIR
+PDATA=$LBPDATA/$PDIR
 PLOG=$LBPLOG/$PDIR
+PBIN=$LBPBIN/$PDIR
+PHTML=$LBPHTML/$PDIR
+PTMPL=$LBPTMPL/$PDIR
 
 # Create logfile
 LOGFILE=$PLOG/install.log
@@ -31,15 +38,15 @@ echo "<INFO> Temp directory: $PTEMPDIR"
 # Create necessary directories
 echo "<INFO> Creating plugin directories..."
 mkdir -p $PCONFIG
-mkdir -p $PLUGINDIR
+mkdir -p $PDATA
 mkdir -p $PBIN
 mkdir -p $PLOG
 
 # Set permissions
 chown -R loxberry:loxberry $PCONFIG
-chown -R loxberry:loxberry $PLUGINDIR
+chown -R loxberry:loxberry $PDATA
 chown -R loxberry:loxberry $PBIN
-chmod -R 775 $PCONFIG $PLUGINDIR $PBIN
+chmod -R 775 $PCONFIG $PDATA $PBIN
 
 echo "<INFO> Installing dependencies..."
 
