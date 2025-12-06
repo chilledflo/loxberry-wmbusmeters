@@ -75,6 +75,27 @@ if [ -n "$INSTALL_SCRIPT" ]; then
     echo "<INFO> Permissions after chmod:"
     ls -la "$INSTALL_SCRIPT"
     echo "<OK> Execute permissions set"
+    
+    # WORKAROUND: LoxBerry doesn't seem to call install.sh automatically
+    # so we call it directly from preinstall.sh
+    echo "<INFO> WORKAROUND: Calling install.sh directly from preinstall..."
+    echo "<INFO> Parameters: PTEMPDIR=$PTEMPDIR PSHNAME=$PSHNAME PDIR=$PDIR PVERSION=$PVERSION LBHOMEDIR=$LBHOMEDIR PTEMPPATH=$PTEMPPATH"
+    
+    # Execute install.sh with the same parameters
+    if [ -x "$INSTALL_SCRIPT" ]; then
+        echo "<INFO> Executing: $INSTALL_SCRIPT $PTEMPDIR $PSHNAME $PDIR $PVERSION $LBHOMEDIR $PTEMPPATH"
+        "$INSTALL_SCRIPT" "$PTEMPDIR" "$PSHNAME" "$PDIR" "$PVERSION" "$LBHOMEDIR" "$PTEMPPATH"
+        INSTALL_RESULT=$?
+        if [ $INSTALL_RESULT -eq 0 ]; then
+            echo "<OK> install.sh completed successfully"
+        else
+            echo "<FAIL> install.sh failed with exit code $INSTALL_RESULT"
+            exit $INSTALL_RESULT
+        fi
+    else
+        echo "<ERROR> install.sh is not executable"
+        exit 1
+    fi
 else
     echo "<ERROR> install.sh NOT found in any expected location"
     echo "<INFO> Searching filesystem..."
