@@ -118,15 +118,24 @@ else
         exit 1
     fi
     
-    echo "<INFO> Build completed, installing..."
-    if ! sudo make install 2>&1 | tee -a $LOGFILE; then
-        echo "<FAIL> Failed to install wmbusmeters"
-        exit 1
+    echo "<INFO> Build completed, installing to plugin directory..."
+    # Install to plugin bin directory instead of system-wide to avoid sudo
+    if ! make DESTDIR=$PBIN install 2>&1 | tee -a $LOGFILE; then
+        echo "<WARN> make install with DESTDIR failed, trying manual copy..."
+        # Manual installation fallback
+        if [ -f "build/wmbusmeters" ]; then
+            cp -v build/wmbusmeters $PBIN/ 2>&1 | tee -a $LOGFILE
+            chmod +x $PBIN/wmbusmeters
+            echo "<OK> Manually copied wmbusmeters binary"
+        elif [ -f "wmbusmeters" ]; then
+            cp -v wmbusmeters $PBIN/ 2>&1 | tee -a $LOGFILE
+            chmod +x $PBIN/wmbusmeters
+            echo "<OK> Manually copied wmbusmeters binary"
+        else
+            echo "<FAIL> Cannot find wmbusmeters binary to install"
+            exit 1
+        fi
     fi
-
-    # Update library cache
-    echo "<INFO> Updating library cache..."
-    sudo ldconfig 2>&1 | tee -a $LOGFILE
 
     # Force rehash PATH
     hash -r
@@ -137,37 +146,36 @@ else
     echo "<INFO> Cleaned up build directory"
 fi
 
-# Verify installation - check multiple locations
+# Verify installation - check plugin bin directory first
 echo "<INFO> Verifying wmbusmeters installation..."
-echo "<INFO> Checking PATH: $PATH"
+echo "<INFO> Plugin bin directory: $PBIN"
 
 # Wait a moment for filesystem sync
 sleep 1
 
 if [ -z "$WMBUSMETERS_BIN" ]; then
-    # Try which first
-    WMBUSMETERS_BIN=$(which wmbusmeters 2>/dev/null)
-    
-    # If which fails, try common locations
-    if [ -z "$WMBUSMETERS_BIN" ] || [ ! -f "$WMBUSMETERS_BIN" ]; then
-        echo "<INFO> which command failed, checking common locations..."
-        if [ -f "/usr/local/bin/wmbusmeters" ]; then
-            WMBUSMETERS_BIN="/usr/local/bin/wmbusmeters"
-        elif [ -f "/usr/bin/wmbusmeters" ]; then
-            WMBUSMETERS_BIN="/usr/bin/wmbusmeters"
-        elif [ -f "/usr/sbin/wmbusmeters" ]; then
-            WMBUSMETERS_BIN="/usr/sbin/wmbusmeters"
-        else
-            echo "<FAIL> wmbusmeters binary not found in common locations"
-            echo "<INFO> Searching entire system (this may take a moment)..."
-            SEARCH_RESULT=$(find /usr -name wmbusmeters -type f 2>/dev/null | head -1)
-            if [ -n "$SEARCH_RESULT" ]; then
-                echo "<INFO> Found at: $SEARCH_RESULT"
-                WMBUSMETERS_BIN="$SEARCH_RESULT"
+    # Check plugin bin directory first
+    if [ -f "$PBIN/wmbusmeters" ]; then
+        WMBUSMETERS_BIN="$PBIN/wmbusmeters"
+        echo "<OK> Found in plugin bin directory"
+    elif [ -f "$PBIN/usr/local/bin/wmbusmeters" ]; then
+        WMBUSMETERS_BIN="$PBIN/usr/local/bin/wmbusmeters"
+        echo "<OK> Found in plugin bin subdirectory"
+    else
+        echo "<INFO> Checking system locations..."
+        # Try which
+        WMBUSMETERS_BIN=$(which wmbusmeters 2>/dev/null)
+        
+        # If which fails, try common locations
+        if [ -z "$WMBUSMETERS_BIN" ] || [ ! -f "$WMBUSMETERS_BIN" ]; then
+            if [ -f "/usr/local/bin/wmbusmeters" ]; then
+                WMBUSMETERS_BIN="/usr/local/bin/wmbusmeters"
+            elif [ -f "/usr/bin/wmbusmeters" ]; then
+                WMBUSMETERS_BIN="/usr/bin/wmbusmeters"
             else
-                echo "<FAIL> wmbusmeters not found anywhere"
-                echo "<INFO> Files in /usr/local/bin:"
-                ls -la /usr/local/bin/ 2>/dev/null | grep -i wmbus || echo "No wmbus files found"
+                echo "<FAIL> wmbusmeters binary not found"
+                echo "<INFO> Contents of $PBIN:"
+                ls -la "$PBIN" 2>/dev/null || echo "Directory not accessible"
                 exit 1
             fi
         fi
@@ -222,11 +230,13 @@ else
     exit 1
 fi
 
-# Create systemd service file using the detected binary location
+# Save binary location for web interface
+echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
+echo "<INFO> Binary path saved to: $PDATA/wmbusmeters_bin_path.txt"
+
+# Create systemd service template file (to be installed via web interface with proper permissions)
 CONFPATH="$PCONFIG/wmbusmeters.conf"
-echo "<INFO> Creating systemd service with config path: $CONFPATH"
-echo "<INFO> Using binary at: $WMBUSMETERS_BIN"
-sudo tee /etc/systemd/system/wmbusmeters.service > /dev/null << EOFSERVICE
+cat > $PDATA/wmbusmeters.service.template << EOFSERVICE
 [Unit]
 Description=WMBus Meters Service
 After=network.target
@@ -244,32 +254,13 @@ RestartSec=10
 WantedBy=multi-user.target
 EOFSERVICE
 
-if [ -f "/etc/systemd/system/wmbusmeters.service" ]; then
-    echo "<OK> Systemd service created successfully"
-    echo "<INFO> Service file content:"
-    cat /etc/systemd/system/wmbusmeters.service
-else
-    echo "<FAIL> Failed to create systemd service"
-    exit 1
-fi
+echo "<OK> Systemd service template created at: $PDATA/wmbusmeters.service.template"
+echo "<INFO> Use web interface to install and manage the service"
 
-# Create log directory for wmbusmeters
-sudo mkdir -p /var/log/wmbusmeters
-sudo chown loxberry:loxberry /var/log/wmbusmeters
-sudo chmod 775 /var/log/wmbusmeters
-
-# Add loxberry user to dialout group for serial port access
-sudo usermod -a -G dialout loxberry
-
-# Reload systemd daemon
-sudo systemctl daemon-reload
-
-# Enable and start service
-echo "<INFO> Enabling wmbusmeters service..."
-sudo systemctl enable wmbusmeters
-
-# Don't start service automatically - user needs to configure first
-echo "<INFO> Service enabled but not started - please configure first"
+# Create log directory for wmbusmeters in plugin data
+mkdir -p $PDATA/logs
+chmod 775 $PDATA/logs
+echo "<OK> Log directory created at: $PDATA/logs"
 
 # Create helper script for easy service management
 cat > $PBIN/wmbusmeters-control.sh << 'EOFSCRIPT'
