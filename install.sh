@@ -54,11 +54,11 @@ echo "<INFO> Installing dependencies..."
 
 # Update package lists
 echo "<INFO> Running apt-get update..."
-apt-get update 2>&1 | tee -a $LOGFILE
+sudo apt-get update 2>&1 | tee -a $LOGFILE
 
 # Install required packages
 echo "<INFO> Installing build dependencies..."
-apt-get install -y \
+sudo apt-get install -y \
     build-essential \
     git \
     cmake \
@@ -114,14 +114,14 @@ else
     fi
     
     echo "<INFO> Build completed, installing..."
-    if ! make install 2>&1 | tee -a $LOGFILE; then
+    if ! sudo make install 2>&1 | tee -a $LOGFILE; then
         echo "<FAIL> Failed to install wmbusmeters"
         exit 1
     fi
 
     # Update library cache
     echo "<INFO> Updating library cache..."
-    ldconfig 2>&1 | tee -a $LOGFILE
+    sudo ldconfig 2>&1 | tee -a $LOGFILE
 
     # Force rehash PATH
     hash -r
@@ -130,7 +130,6 @@ else
     cd /tmp
     rm -rf wmbusmeters
     echo "<INFO> Cleaned up build directory"
-fi
 fi
 
 # Verify installation - check multiple locations
@@ -222,7 +221,7 @@ fi
 CONFPATH="$PCONFIG/wmbusmeters.conf"
 echo "<INFO> Creating systemd service with config path: $CONFPATH"
 echo "<INFO> Using binary at: $WMBUSMETERS_BIN"
-cat > /etc/systemd/system/wmbusmeters.service << EOFSERVICE
+sudo tee /etc/systemd/system/wmbusmeters.service > /dev/null << EOFSERVICE
 [Unit]
 Description=WMBus Meters Service
 After=network.target
@@ -250,19 +249,19 @@ else
 fi
 
 # Create log directory for wmbusmeters
-mkdir -p /var/log/wmbusmeters
-chown loxberry:loxberry /var/log/wmbusmeters
-chmod 775 /var/log/wmbusmeters
+sudo mkdir -p /var/log/wmbusmeters
+sudo chown loxberry:loxberry /var/log/wmbusmeters
+sudo chmod 775 /var/log/wmbusmeters
 
 # Add loxberry user to dialout group for serial port access
-usermod -a -G dialout loxberry
+sudo usermod -a -G dialout loxberry
 
 # Reload systemd daemon
-systemctl daemon-reload
+sudo systemctl daemon-reload
 
 # Enable and start service
 echo "<INFO> Enabling wmbusmeters service..."
-systemctl enable wmbusmeters
+sudo systemctl enable wmbusmeters
 
 # Don't start service automatically - user needs to configure first
 echo "<INFO> Service enabled but not started - please configure first"
