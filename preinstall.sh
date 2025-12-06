@@ -53,23 +53,33 @@ if [ $FREESPACE -lt 100 ]; then
     exit 1
 fi
 
-# Try to find the actual temp path
+# Try to find the actual temp path and fix permissions
 echo "<INFO> Searching for install.sh..."
+INSTALL_SCRIPT=""
 if [ -f "$PTEMPPATH/install.sh" ]; then
-    echo "<OK> install.sh found at: $PTEMPPATH/install.sh"
-    ls -la "$PTEMPPATH/install.sh"
+    INSTALL_SCRIPT="$PTEMPPATH/install.sh"
 elif [ -f "$LBHOMEDIR/system/tmpfs/$PTEMPDIR/install.sh" ]; then
-    echo "<OK> install.sh found at: $LBHOMEDIR/system/tmpfs/$PTEMPDIR/install.sh"
-    ls -la "$LBHOMEDIR/system/tmpfs/$PTEMPDIR/install.sh"
+    INSTALL_SCRIPT="$LBHOMEDIR/system/tmpfs/$PTEMPDIR/install.sh"
 elif [ -f "/tmp/$PTEMPDIR/install.sh" ]; then
-    echo "<OK> install.sh found at: /tmp/$PTEMPDIR/install.sh"
-    ls -la "/tmp/$PTEMPDIR/install.sh"
+    INSTALL_SCRIPT="/tmp/$PTEMPDIR/install.sh"
+fi
+
+if [ -n "$INSTALL_SCRIPT" ]; then
+    echo "<OK> install.sh found at: $INSTALL_SCRIPT"
+    ls -la "$INSTALL_SCRIPT"
+    
+    # Make all shell scripts executable
+    echo "<INFO> Setting execute permissions on shell scripts..."
+    chmod +x "$PTEMPPATH"/*.sh 2>/dev/null || true
+    
+    echo "<INFO> Permissions after chmod:"
+    ls -la "$INSTALL_SCRIPT"
+    echo "<OK> Execute permissions set"
 else
-    echo "<WARN> install.sh NOT found in expected locations"
-    echo "<INFO> Checking common temp directories:"
-    ls -la "$LBHOMEDIR/system/tmpfs/" 2>&1 | grep -i "$PTEMPDIR" || echo "Not in system/tmpfs"
-    ls -la "/tmp/" 2>&1 | grep -i "$PTEMPDIR" || echo "Not in /tmp"
+    echo "<ERROR> install.sh NOT found in any expected location"
+    echo "<INFO> Searching filesystem..."
     find /tmp -name "install.sh" -type f 2>/dev/null | head -5
+    exit 1
 fi
 
 echo "<OK> Preinstall checks passed"
