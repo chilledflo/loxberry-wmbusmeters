@@ -54,93 +54,9 @@ chown -R loxberry:loxberry $PDATA
 chown -R loxberry:loxberry $PBIN
 chmod -R 775 $PCONFIG $PDATA $PBIN
 
-echo "<INFO> ============================================"
-echo "<INFO> WMBusMeters Plugin Installation - Phase 1"
-echo "<INFO> ============================================"
-echo "<INFO>"
-echo "<WARN> WMBusMeters requires root access to install system packages."
-echo "<WARN> After this plugin installation completes, please run:"
-echo "<WARN>"
-echo "<WARN>   sudo /opt/loxberry/data/plugins/wmbusmeters/setup-wmbusmeters.sh"
-echo "<WARN>"
-echo "<INFO> This will install WMBusMeters from the official Debian repository."
-echo "<INFO>"
+echo "<INFO> Installing WMBusMeters..."
 
-# Create setup script for user to run with sudo
-cat > $PDATA/setup-wmbusmeters.sh << 'EOFSETUP'
-#!/bin/bash
-# WMBusMeters Setup Script - Run with sudo
-
-set -e
-
-echo "========================================="
-echo "WMBusMeters Installation"
-echo "========================================="
-echo ""
-
-if [ "$EUID" -ne 0 ]; then 
-    echo "ERROR: Please run with sudo"
-    echo "Usage: sudo /opt/loxberry/data/plugins/wmbusmeters/setup-wmbusmeters.sh"
-    exit 1
-fi
-
-PDATA="/opt/loxberry/data/plugins/wmbusmeters"
-
-echo "Step 1: Adding WMBusMeters repository..."
-if [ ! -f /etc/apt/sources.list.d/wmbusmeters.list ]; then
-    echo "deb http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/ /" > /etc/apt/sources.list.d/wmbusmeters.list
-    wget -qO - https://download.opensuse.org/repositories/home:/weetmuts/Debian_12/Release.key | apt-key add - 2>/dev/null || true
-    echo "Repository added"
-else
-    echo "Repository already exists"
-fi
-
-echo ""
-echo "Step 2: Updating package lists..."
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-
-echo ""
-echo "Step 3: Installing wmbusmeters..."
-apt-get install -y wmbusmeters
-
-if command -v wmbusmeters &> /dev/null; then
-    VERSION=$(wmbusmeters --version 2>&1 | head -n1)
-    BINPATH=$(which wmbusmeters)
-    echo ""
-    echo "SUCCESS!"
-    echo "  Version: $VERSION"
-    echo "  Binary: $BINPATH"
-    
-    # Save for web interface
-    echo "$BINPATH" > "$PDATA/wmbusmeters_bin_path.txt"
-    chown loxberry:loxberry "$PDATA/wmbusmeters_bin_path.txt"
-else
-    echo "ERROR: Installation failed"
-    exit 1
-fi
-
-echo ""
-echo "Step 4: Configuring system..."
-mkdir -p /var/log/wmbusmeters
-chown loxberry:loxberry /var/log/wmbusmeters
-chmod 775 /var/log/wmbusmeters
-usermod -a -G dialout loxberry
-systemctl stop wmbusmeters 2>/dev/null || true
-systemctl disable wmbusmeters 2>/dev/null || true
-
-echo ""
-echo "========================================="
-echo "Installation Complete!"
-echo "========================================="
-echo "Configure WMBusMeters via LoxBerry web interface"
-echo ""
-EOFSETUP
-
-chmod +x $PDATA/setup-wmbusmeters.sh
-echo "<OK> Setup script created: $PDATA/setup-wmbusmeters.sh"
-
-# Check if already installed
+# Check if already installed system-wide
 if command -v wmbusmeters &> /dev/null; then
     CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
     WMBUSMETERS_BIN=$(which wmbusmeters)
@@ -148,8 +64,83 @@ if command -v wmbusmeters &> /dev/null; then
     echo "<INFO> Binary at: $WMBUSMETERS_BIN"
     echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
 else
-    echo "<WARN> wmbusmeters not installed yet"
-    echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+    # Download and install pre-built binary
+    echo "<INFO> Downloading pre-built WMBusMeters binary..."
+    
+    # Determine architecture
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "x86_64" ]; then
+        DOWNLOAD_URL="https://github.com/wmbusmeters/wmbusmeters/releases/latest/download/wmbusmeters_amd64"
+    elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "armv7l" ]; then
+        DOWNLOAD_URL="https://github.com/wmbusmeters/wmbusmeters/releases/latest/download/wmbusmeters_arm"
+    else
+        echo "<WARN> Unknown architecture: $ARCH"
+        echo "<INFO> Trying generic x86_64 binary..."
+        DOWNLOAD_URL="https://github.com/wmbusmeters/wmbusmeters/releases/latest/download/wmbusmeters_amd64"
+    fi
+    
+    echo "<INFO> Architecture: $ARCH"
+    echo "<INFO> Download URL: $DOWNLOAD_URL"
+    
+    # Download to plugin bin directory
+    if wget -q -O "$PBIN/wmbusmeters" "$DOWNLOAD_URL"; then
+        chmod +x "$PBIN/wmbusmeters"
+        echo "<OK> Binary downloaded successfully"
+        
+        # Test if it works
+        if "$PBIN/wmbusmeters" --version &> /dev/null; then
+            VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
+            echo "<OK> WMBusMeters installed: $VERSION"
+            echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
+        else
+            echo "<WARN> Binary downloaded but not executable - trying to build from source..."
+            rm -f "$PBIN/wmbusmeters"
+            
+            # Fallback: Try to download Debian package and extract
+            echo "<INFO> Attempting to download Debian package..."
+            cd /tmp
+            wget -q http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_1.17.1-1_amd64.deb -O wmbusmeters.deb || true
+            
+            if [ -f wmbusmeters.deb ]; then
+                echo "<INFO> Extracting binary from package..."
+                ar x wmbusmeters.deb
+                tar xf data.tar.xz
+                if [ -f usr/bin/wmbusmeters ]; then
+                    cp usr/bin/wmbusmeters "$PBIN/wmbusmeters"
+                    chmod +x "$PBIN/wmbusmeters"
+                    echo "<OK> Binary extracted from package"
+                    echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
+                fi
+                # Cleanup
+                rm -rf wmbusmeters.deb control.tar.xz data.tar.xz debian-binary usr
+            else
+                echo "<FAIL> Could not download package"
+                echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+            fi
+        fi
+    else
+        echo "<WARN> Download failed, trying Debian package..."
+        cd /tmp
+        wget -q http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_1.17.1-1_amd64.deb -O wmbusmeters.deb || true
+        
+        if [ -f wmbusmeters.deb ]; then
+            echo "<INFO> Extracting binary from package..."
+            ar x wmbusmeters.deb
+            tar xf data.tar.xz
+            if [ -f usr/bin/wmbusmeters ]; then
+                cp usr/bin/wmbusmeters "$PBIN/wmbusmeters"
+                chmod +x "$PBIN/wmbusmeters"
+                VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
+                echo "<OK> Binary extracted: $VERSION"
+                echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
+            fi
+            # Cleanup
+            rm -rf wmbusmeters.deb control.tar.xz data.tar.xz debian-binary usr
+        else
+            echo "<FAIL> Could not install WMBusMeters"
+            echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+        fi
+    fi
 fi
 
 # Final status check
