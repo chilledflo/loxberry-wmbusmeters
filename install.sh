@@ -3,37 +3,43 @@
 # Installation script for WMBusMeters Plugin
 # Will be executed during installation and updates
 
-ARGV0=$0 # Zero argument is shell command
-ARGV1=$1 # First argument is folder path
-ARGV2=$2 # Second argument is plugin name
+ARGV0=$0    # Zero argument is shell command
+PTEMPDIR=$1 # First argument is temp folder during install
+PSHNAME=$2  # Second argument is Plugin-Name for scripts etc.
+PDIR=$3     # Third argument is Plugin installation folder
+PVERSION=$4 # Fourth argument is Plugin version
+LBHOMEDIR=$5 # Fifth argument is LoxBerry home directory
+PTEMPPATH=$6 # Sixth argument is full temp path during install
 
-# Read LoxBerry environment
-. $LBHOMEDIR/libs/bashlib/loxberry_log.sh
-. $LBHOMEDIR/libs/bashlib/loxberry_system.sh
-
-PACKAGE=$ARGV2
-PLUGINNAME=${PACKAGE}
-LOGDIR=$LBHOMEDIR/log/plugins/$PLUGINNAME
-PLUGINDIR=$ARGV1
+# Combine them with /etc/environment
+PLUGINDIR=$LBPDATA/$PDIR
+PCONFIG=$LBPCONFIG/$PDIR
+PBIN=$LBPBIN/$PDIR
+PLOG=$LBPLOG/$PDIR
 
 # Create logfile
-LOGFILE=$LOGDIR/install.log
+LOGFILE=$PLOG/install.log
+mkdir -p $PLOG
 touch $LOGFILE
 exec > >(tee -a $LOGFILE) 2>&1
 
-echo "<INFO> Installation script started for $PLUGINNAME"
-echo "<INFO> Plugin directory: $PLUGINDIR"
+echo "<INFO> Installation script started for $PSHNAME"
+echo "<INFO> Plugin directory: $PDIR"
+echo "<INFO> LoxBerry home: $LBHOMEDIR"
+echo "<INFO> Temp directory: $PTEMPDIR"
 
 # Create necessary directories
 echo "<INFO> Creating plugin directories..."
-mkdir -p $PLUGINDIR/config
-mkdir -p $PLUGINDIR/data
-mkdir -p $PLUGINDIR/bin
-mkdir -p $PLUGINDIR/log
+mkdir -p $PCONFIG
+mkdir -p $PLUGINDIR
+mkdir -p $PBIN
+mkdir -p $PLOG
 
 # Set permissions
+chown -R loxberry:loxberry $PCONFIG
 chown -R loxberry:loxberry $PLUGINDIR
-chmod -R 775 $PLUGINDIR
+chown -R loxberry:loxberry $PBIN
+chmod -R 775 $PCONFIG $PLUGINDIR $PBIN
 
 echo "<INFO> Installing dependencies..."
 
@@ -76,7 +82,7 @@ make install
 
 # Create default configuration
 echo "<INFO> Creating default configuration..."
-cat > $PLUGINDIR/config/wmbusmeters.conf << 'EOF'
+cat > $PCONFIG/wmbusmeters.conf << 'EOF'
 # WMBusmeters Configuration File
 # See https://github.com/wmbusmeters/wmbusmeters for documentation
 
@@ -98,7 +104,7 @@ EOF
 
 # Create systemd service file
 echo "<INFO> Creating systemd service..."
-cat > /etc/systemd/system/wmbusmeters.service << EOF
+cat > /etc/systemd/system/wmbusmeters.service << EOFSERVICE
 [Unit]
 Description=WMBus Meters Service
 After=network.target
@@ -108,13 +114,13 @@ Documentation=https://github.com/wmbusmeters/wmbusmeters
 Type=simple
 User=loxberry
 Group=loxberry
-ExecStart=/usr/bin/wmbusmeters --useconfig=$PLUGINDIR/config
+ExecStart=/usr/bin/wmbusmeters --useconfig=$PCONFIG
 Restart=always
 RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOFSERVICE
 
 # Create log directory for wmbusmeters
 mkdir -p /var/log/wmbusmeters
@@ -135,7 +141,7 @@ systemctl enable wmbusmeters
 echo "<INFO> Service enabled but not started - please configure first"
 
 # Create helper script for easy service management
-cat > $PLUGINDIR/bin/wmbusmeters-control.sh << 'EOF'
+cat > $PBIN/wmbusmeters-control.sh << 'EOFSCRIPT'
 #!/bin/bash
 case "$1" in
     start)
@@ -158,9 +164,9 @@ case "$1" in
         exit 1
         ;;
 esac
-EOF
+EOFSCRIPT
 
-chmod +x $PLUGINDIR/bin/wmbusmeters-control.sh
+chmod +x $PBIN/wmbusmeters-control.sh
 
 # Clean up
 cd /tmp
