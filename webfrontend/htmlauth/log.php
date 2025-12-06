@@ -14,8 +14,8 @@ $navbar[3]['active'] = true;
 LBWeb::lbheader($pluginname, "", "");
 
 $plugindir = $lbpplugindir;
-$log_type = isset($_GET['type']) ? $_GET['type'] : 'service';
-$lines = isset($_GET['lines']) ? intval($_GET['lines']) : 100;
+$log_type = isset($_GET['type']) ? $_GET['type'] : 'install';
+$lines = isset($_GET['lines']) ? intval($_GET['lines']) : 200;
 ?>
 
 <style>
@@ -28,8 +28,8 @@ select { padding: 8px; border-radius: 4px; border: 1px solid #ddd; margin: 5px; 
 <div>
     <label>Log-Typ:</label>
     <select onchange="location = 'log.php?type=' + this.value + '&lines=<?php echo $lines; ?>'">
-        <option value="service" <?php echo $log_type === 'service' ? 'selected' : ''; ?>>Service Log</option>
         <option value="install" <?php echo $log_type === 'install' ? 'selected' : ''; ?>>Installation Log</option>
+        <option value="service" <?php echo $log_type === 'service' ? 'selected' : ''; ?>>Service Log</option>
         <option value="readings" <?php echo $log_type === 'readings' ? 'selected' : ''; ?>>Meter Readings</option>
     </select>
     
@@ -54,7 +54,7 @@ switch ($log_type) {
         $title = "Service Log";
         break;
     case 'install':
-        $log_file = "$plugindir/../../../log/plugins/$pluginname/install.log";
+        $log_file = $lbplogdir . "/install.log";
         $title = "Installation Log";
         break;
     case 'readings':
@@ -67,6 +67,7 @@ switch ($log_type) {
 }
 
 echo "<h2>$title</h2>";
+echo "<p><small>Log-Datei: <code>$log_file</code></small></p>";
 
 if (file_exists($log_file)) {
     $log_content = shell_exec("tail -n $lines " . escapeshellarg($log_file));
@@ -74,7 +75,25 @@ if (file_exists($log_file)) {
         $log_content = "Log-Datei ist leer.";
     }
 } else {
-    $log_content = "Log-Datei nicht gefunden: $log_file";
+    $log_content = "Log-Datei nicht gefunden: $log_file\n\n";
+    $log_content .= "Suche nach alternativen Pfaden...\n";
+    
+    // Try alternative paths
+    $alt_paths = [
+        $lbplogdir . "/install.log",
+        "/opt/loxberry/log/plugins/wmbusmeters/install.log",
+        "$plugindir/../../../log/plugins/$pluginname/install.log"
+    ];
+    
+    foreach ($alt_paths as $alt_path) {
+        if (file_exists($alt_path)) {
+            $log_content .= "Gefunden: $alt_path\n\n";
+            $log_content .= shell_exec("tail -n $lines " . escapeshellarg($alt_path));
+            break;
+        } else {
+            $log_content .= "Nicht gefunden: $alt_path\n";
+        }
+    }
 }
 
 echo "<div class='log-box'>";
