@@ -54,151 +54,116 @@ chown -R loxberry:loxberry $PDATA
 chown -R loxberry:loxberry $PBIN
 chmod -R 775 $PCONFIG $PDATA $PBIN
 
-echo "<INFO> Installing dependencies..."
+echo "<INFO> ============================================"
+echo "<INFO> WMBusMeters Plugin Installation - Phase 1"
+echo "<INFO> ============================================"
+echo "<INFO>"
+echo "<WARN> WMBusMeters requires root access to install system packages."
+echo "<WARN> After this plugin installation completes, please run:"
+echo "<WARN>"
+echo "<WARN>   sudo /opt/loxberry/data/plugins/wmbusmeters/setup-wmbusmeters.sh"
+echo "<WARN>"
+echo "<INFO> This will install WMBusMeters from the official Debian repository."
+echo "<INFO>"
 
-# Update package lists
-echo "<INFO> Running apt-get update..."
-export DEBIAN_FRONTEND=noninteractive
-sudo -E apt-get update 2>&1 | tee -a $LOGFILE
+# Create setup script for user to run with sudo
+cat > $PDATA/setup-wmbusmeters.sh << 'EOFSETUP'
+#!/bin/bash
+# WMBusMeters Setup Script - Run with sudo
 
-# Install required packages
-echo "<INFO> Installing build dependencies..."
-export DEBIAN_FRONTEND=noninteractive
-sudo -E apt-get install -y \
-    build-essential \
-    git \
-    cmake \
-    pkg-config \
-    librtlsdr-dev \
-    libusb-1.0-0-dev \
-    mosquitto-clients \
-    wget \
-    curl 2>&1 | tee -a $LOGFILE
+set -e
 
-if [ $? -ne 0 ]; then
-    echo "<WARN> Some dependencies might have failed to install"
-fi
+echo "========================================="
+echo "WMBusMeters Installation"
+echo "========================================="
+echo ""
 
-echo "<INFO> Installing wmbusmeters..."
-
-# Check if wmbusmeters is already installed
-if command -v wmbusmeters &> /dev/null; then
-    echo "<INFO> wmbusmeters is already installed, checking version..."
-    CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
-    echo "<INFO> Current version: $CURRENT_VERSION"
-    WMBUSMETERS_BIN=$(which wmbusmeters)
-    echo "<INFO> Using existing installation at: $WMBUSMETERS_BIN"
-else
-    # Manual build is more reliable on Raspberry Pi
-    echo "<INFO> Building wmbusmeters from source..."
-    
-    # Clone and build wmbusmeters
-    cd /tmp
-    if [ -d "wmbusmeters" ]; then
-        echo "<INFO> Removing old build directory..."
-        rm -rf wmbusmeters
-    fi
-
-    echo "<INFO> Cloning wmbusmeters repository..."
-    if ! git clone https://github.com/wmbusmeters/wmbusmeters.git 2>&1 | tee -a $LOGFILE; then
-        echo "<FAIL> Failed to clone wmbusmeters repository"
-        echo "<INFO> Check internet connection and GitHub access"
-        exit 1
-    fi
-    
-    cd wmbusmeters
-    echo "<INFO> Current directory: $(pwd)"
-    echo "<INFO> Build files present:"
-    ls -la
-
-    echo "<INFO> Building wmbusmeters (this may take several minutes)..."
-    if ! make 2>&1 | tee -a $LOGFILE; then
-        echo "<FAIL> Failed to build wmbusmeters"
-        echo "<INFO> Check build log above for errors"
-        exit 1
-    fi
-    
-    echo "<INFO> Build completed, installing to plugin directory..."
-    # Install to plugin bin directory instead of system-wide to avoid sudo
-    if ! make DESTDIR=$PBIN install 2>&1 | tee -a $LOGFILE; then
-        echo "<WARN> make install with DESTDIR failed, trying manual copy..."
-        # Manual installation fallback
-        if [ -f "build/wmbusmeters" ]; then
-            cp -v build/wmbusmeters $PBIN/ 2>&1 | tee -a $LOGFILE
-            chmod +x $PBIN/wmbusmeters
-            echo "<OK> Manually copied wmbusmeters binary"
-        elif [ -f "wmbusmeters" ]; then
-            cp -v wmbusmeters $PBIN/ 2>&1 | tee -a $LOGFILE
-            chmod +x $PBIN/wmbusmeters
-            echo "<OK> Manually copied wmbusmeters binary"
-        else
-            echo "<FAIL> Cannot find wmbusmeters binary to install"
-            exit 1
-        fi
-    fi
-
-    # Force rehash PATH
-    hash -r
-    
-    # Clean up
-    cd /tmp
-    rm -rf wmbusmeters
-    echo "<INFO> Cleaned up build directory"
-fi
-
-# Verify installation - check plugin bin directory first
-echo "<INFO> Verifying wmbusmeters installation..."
-echo "<INFO> Plugin bin directory: $PBIN"
-
-# Wait a moment for filesystem sync
-sleep 1
-
-if [ -z "$WMBUSMETERS_BIN" ]; then
-    # Check plugin bin directory first
-    if [ -f "$PBIN/wmbusmeters" ]; then
-        WMBUSMETERS_BIN="$PBIN/wmbusmeters"
-        echo "<OK> Found in plugin bin directory"
-    elif [ -f "$PBIN/usr/local/bin/wmbusmeters" ]; then
-        WMBUSMETERS_BIN="$PBIN/usr/local/bin/wmbusmeters"
-        echo "<OK> Found in plugin bin subdirectory"
-    else
-        echo "<INFO> Checking system locations..."
-        # Try which
-        WMBUSMETERS_BIN=$(which wmbusmeters 2>/dev/null)
-        
-        # If which fails, try common locations
-        if [ -z "$WMBUSMETERS_BIN" ] || [ ! -f "$WMBUSMETERS_BIN" ]; then
-            if [ -f "/usr/local/bin/wmbusmeters" ]; then
-                WMBUSMETERS_BIN="/usr/local/bin/wmbusmeters"
-            elif [ -f "/usr/bin/wmbusmeters" ]; then
-                WMBUSMETERS_BIN="/usr/bin/wmbusmeters"
-            else
-                echo "<FAIL> wmbusmeters binary not found"
-                echo "<INFO> Contents of $PBIN:"
-                ls -la "$PBIN" 2>/dev/null || echo "Directory not accessible"
-                exit 1
-            fi
-        fi
-    fi
-fi
-
-echo "<OK> Found wmbusmeters at: $WMBUSMETERS_BIN"
-ls -la "$WMBUSMETERS_BIN"
-
-# Test the binary
-echo "<INFO> Testing wmbusmeters binary..."
-if ! "$WMBUSMETERS_BIN" --version &> /dev/null; then
-    echo "<FAIL> wmbusmeters binary exists but cannot execute"
-    echo "<INFO> File information:"
-    file "$WMBUSMETERS_BIN"
-    echo "<INFO> Permissions:"
-    ls -la "$WMBUSMETERS_BIN"
+if [ "$EUID" -ne 0 ]; then 
+    echo "ERROR: Please run with sudo"
+    echo "Usage: sudo /opt/loxberry/data/plugins/wmbusmeters/setup-wmbusmeters.sh"
     exit 1
 fi
 
-INSTALLED_VERSION=$("$WMBUSMETERS_BIN" --version 2>&1 | head -n1)
-echo "<OK> wmbusmeters installed successfully: $INSTALLED_VERSION"
-echo "<OK> Binary location: $WMBUSMETERS_BIN"
+PDATA="/opt/loxberry/data/plugins/wmbusmeters"
+
+echo "Step 1: Adding WMBusMeters repository..."
+if [ ! -f /etc/apt/sources.list.d/wmbusmeters.list ]; then
+    echo "deb http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/ /" > /etc/apt/sources.list.d/wmbusmeters.list
+    wget -qO - https://download.opensuse.org/repositories/home:/weetmuts/Debian_12/Release.key | apt-key add - 2>/dev/null || true
+    echo "Repository added"
+else
+    echo "Repository already exists"
+fi
+
+echo ""
+echo "Step 2: Updating package lists..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+
+echo ""
+echo "Step 3: Installing wmbusmeters..."
+apt-get install -y wmbusmeters
+
+if command -v wmbusmeters &> /dev/null; then
+    VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+    BINPATH=$(which wmbusmeters)
+    echo ""
+    echo "SUCCESS!"
+    echo "  Version: $VERSION"
+    echo "  Binary: $BINPATH"
+    
+    # Save for web interface
+    echo "$BINPATH" > "$PDATA/wmbusmeters_bin_path.txt"
+    chown loxberry:loxberry "$PDATA/wmbusmeters_bin_path.txt"
+else
+    echo "ERROR: Installation failed"
+    exit 1
+fi
+
+echo ""
+echo "Step 4: Configuring system..."
+mkdir -p /var/log/wmbusmeters
+chown loxberry:loxberry /var/log/wmbusmeters
+chmod 775 /var/log/wmbusmeters
+usermod -a -G dialout loxberry
+systemctl stop wmbusmeters 2>/dev/null || true
+systemctl disable wmbusmeters 2>/dev/null || true
+
+echo ""
+echo "========================================="
+echo "Installation Complete!"
+echo "========================================="
+echo "Configure WMBusMeters via LoxBerry web interface"
+echo ""
+EOFSETUP
+
+chmod +x $PDATA/setup-wmbusmeters.sh
+echo "<OK> Setup script created: $PDATA/setup-wmbusmeters.sh"
+
+# Check if already installed
+if command -v wmbusmeters &> /dev/null; then
+    CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+    WMBUSMETERS_BIN=$(which wmbusmeters)
+    echo "<OK> wmbusmeters already installed: $CURRENT_VERSION"
+    echo "<INFO> Binary at: $WMBUSMETERS_BIN"
+    echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
+else
+    echo "<WARN> wmbusmeters not installed yet"
+    echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+fi
+
+# Final status check
+if command -v wmbusmeters &> /dev/null; then
+    INSTALLED_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+    WMBUSMETERS_BIN=$(which wmbusmeters)
+    echo "<OK> WMBusMeters ready: $INSTALLED_VERSION"
+    echo "<OK> Binary location: $WMBUSMETERS_BIN"
+else
+    echo "<INFO> WMBusMeters not yet installed"
+    echo "<INFO> Run the setup script to complete installation:"
+    echo "<INFO> sudo $PDATA/setup-wmbusmeters.sh"
+    WMBUSMETERS_BIN="NOT_INSTALLED"
+fi
 
 # Create default configuration
 echo "<INFO> Creating default configuration at $PCONFIG/wmbusmeters.conf"
