@@ -87,6 +87,15 @@ echo "<INFO> Building wmbusmeters..."
 make
 make install
 
+# Verify installation
+if ! command -v wmbusmeters &> /dev/null; then
+    echo "<FAIL> wmbusmeters installation failed - binary not found in PATH"
+    exit 1
+fi
+
+INSTALLED_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+echo "<OK> wmbusmeters installed successfully: $INSTALLED_VERSION"
+
 # Create default configuration
 echo "<INFO> Creating default configuration..."
 cat > $PCONFIG/wmbusmeters.conf << 'EOF'
@@ -121,13 +130,15 @@ Documentation=https://github.com/wmbusmeters/wmbusmeters
 Type=simple
 User=loxberry
 Group=loxberry
-ExecStart=/usr/bin/wmbusmeters --useconfig=$PCONFIG
+ExecStart=/usr/bin/wmbusmeters --useconfig=$PCONFIG/wmbusmeters.conf
 Restart=always
 RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
 EOFSERVICE
+
+echo "<INFO> Systemd service created with config: $PCONFIG/wmbusmeters.conf"
 
 # Create log directory for wmbusmeters
 mkdir -p /var/log/wmbusmeters

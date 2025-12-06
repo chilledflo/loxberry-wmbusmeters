@@ -14,7 +14,8 @@ $navbar[3]['URL'] = "log.php";
 LBWeb::lbheader($pluginname, "", "");
 
 $plugindir = $lbpplugindir;
-$configfile = "$plugindir/config/wmbusmeters.conf";
+$configdir = $lbpconfigdir;
+$configfile = "$configdir/wmbusmeters.conf";
 
 // Handle form submission
 $message = "";
