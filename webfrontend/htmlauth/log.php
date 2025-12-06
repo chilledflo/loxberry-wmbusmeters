@@ -76,23 +76,43 @@ if (file_exists($log_file)) {
     }
 } else {
     $log_content = "Log-Datei nicht gefunden: $log_file\n\n";
-    $log_content .= "Suche nach alternativen Pfaden...\n";
+    $log_content .= "Debug-Information:\n";
+    $log_content .= "LBPLOGDIR: $lbplogdir\n";
+    $log_content .= "LBPPLUGINDIR: $lbpplugindir\n";
+    $log_content .= "Current User: " . shell_exec("whoami") . "\n";
+    $log_content .= "\nSuche nach alternativen Pfaden...\n";
     
     // Try alternative paths
     $alt_paths = [
-        $lbplogdir . "/install.log",
         "/opt/loxberry/log/plugins/wmbusmeters/install.log",
-        "$plugindir/../../../log/plugins/$pluginname/install.log"
+        "/opt/loxberry/log/plugins/wmbusmeters/",
+        "/opt/loxberry/log/system_tmpfs/",
+        "/opt/loxberry/log/",
     ];
     
     foreach ($alt_paths as $alt_path) {
         if (file_exists($alt_path)) {
-            $log_content .= "Gefunden: $alt_path\n\n";
-            $log_content .= shell_exec("tail -n $lines " . escapeshellarg($alt_path));
-            break;
+            if (is_dir($alt_path)) {
+                $log_content .= "\nVerzeichnis gefunden: $alt_path\n";
+                $log_content .= "Inhalt:\n";
+                $log_content .= shell_exec("ls -lah " . escapeshellarg($alt_path) . " 2>&1");
+            } else {
+                $log_content .= "\nGefunden: $alt_path\n\n";
+                $log_content .= shell_exec("tail -n $lines " . escapeshellarg($alt_path));
+                break;
+            }
         } else {
             $log_content .= "Nicht gefunden: $alt_path\n";
         }
+    }
+    
+    // Check system logs for plugin installation
+    $log_content .= "\n\n=== LoxBerry System Logs (Plugin Installation) ===\n";
+    $system_log = shell_exec("grep -r 'wmbusmeters' /opt/loxberry/log/system_tmpfs/ 2>&1 | tail -50");
+    if (!empty($system_log)) {
+        $log_content .= $system_log;
+    } else {
+        $log_content .= "Keine System-Logs gefunden.\n";
     }
 }
 
