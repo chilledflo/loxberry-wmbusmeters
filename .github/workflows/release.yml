@@ -1,0 +1,36 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Create Release ZIP
+        run: |
+          # Create ZIP with correct structure (files in root)
+          zip -r loxberry-wmbusmeters-${{ github.ref_name }}.zip \
+            plugin.cfg \
+            preinstall.sh \
+            preupgrade.sh \
+            install.sh \
+            uninstall.sh \
+            release.cfg \
+            README.md \
+            INSTALLATION.md \
+            wmbusmeters.svg \
+            webfrontend/
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: loxberry-wmbusmeters-${{ github.ref_name }}.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
