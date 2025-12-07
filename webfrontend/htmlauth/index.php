@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
             case 'install_manual':
-                // Run installation script with sudo and password
+                // Run installation script with su and password
                 $install_script = $lbpbindir . "/install-wmbusmeters.sh";
                 $root_password = isset($_POST['root_password']) ? $_POST['root_password'] : '';
                 
@@ -41,14 +41,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $message .= "<p>Dies kann 30-60 Sekunden dauern. Bitte warten...</p>";
                     $message .= "<div style='font-family: monospace; background: #000; color: #0f0; padding: 10px; border-radius: 4px; margin: 10px 0; max-height: 300px; overflow-y: auto;'>";
                     
-                    // Use sudo with password via stdin
-                    $command = "echo " . escapeshellarg($root_password) . " | sudo -S " . escapeshellarg($install_script) . " 2>&1";
-                    exec($command, $output, $return);
+                    // Create temporary wrapper script that uses su
+                    $temp_script = $lbptmpdir . '/install_wrapper_' . time() . '.sh';
+                    $wrapper_content = "#!/bin/bash\n";
+                    $wrapper_content .= "echo " . escapeshellarg($root_password) . " | su -c 'bash " . escapeshellarg($install_script) . "' root 2>&1\n";
+                    file_put_contents($temp_script, $wrapper_content);
+                    chmod($temp_script, 0755);
+                    
+                    // Execute wrapper script
+                    exec("bash " . escapeshellarg($temp_script) . " 2>&1", $output, $return);
+                    
+                    // Clean up
+                    @unlink($temp_script);
                     
                     // Remove password prompt from output
                     $filtered_output = array_filter($output, function($line) {
-                        return stripos($line, '[sudo]') === false && 
-                               stripos($line, 'password') === false;
+                        return stripos($line, 'password') === false;
                     });
                     
                     $message .= nl2br(htmlspecialchars(implode("\n", $filtered_output)));
