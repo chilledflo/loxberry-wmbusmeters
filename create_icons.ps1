@@ -103,13 +103,24 @@ if ($inkscape) {
         
         # Draw text if large enough
         if ($size -ge 128) {
-            $font = New-Object System.Drawing.Font("Arial", [int]($size / 9), [System.Drawing.FontStyle]::Bold)
+            $font = New-Object System.Drawing.Font("Arial", [int]($size / 8), [System.Drawing.FontStyle]::Bold)
             $textBrush = New-Object System.Drawing.SolidBrush($white)
             $text = "WMBus"
             $textSize = $graphics.MeasureString($text, $font)
             $textX = ($size - $textSize.Width) / 2
-            $textY = $margin + $size / 15
+            $textY = $margin + $size / 12
             $graphics.DrawString($text, $font, $textBrush, $textX, $textY)
+        }
+        
+        # Add small "Meters" text at bottom for larger icons
+        if ($size -ge 256) {
+            $font2 = New-Object System.Drawing.Font("Arial", [int]($size / 16), [System.Drawing.FontStyle]::Regular)
+            $textBrush2 = New-Object System.Drawing.SolidBrush($white)
+            $text2 = "METERS"
+            $textSize2 = $graphics.MeasureString($text2, $font2)
+            $textX2 = ($size - $textSize2.Width) / 2
+            $textY2 = $size - $margin - $size / 8
+            $graphics.DrawString($text2, $font2, $textBrush2, $textX2, $textY2)
         }
         
         # Save
