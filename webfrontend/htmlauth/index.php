@@ -25,21 +25,6 @@ $message = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
-            case 'install_now':
-                // Run the auto-installer script
-                $installer_script = $lbpdatadir . "/auto-install-wmbusmeters.sh";
-                if (file_exists($installer_script)) {
-                    exec("sudo " . $installer_script . " 2>&1", $output, $return);
-                    if ($return === 0) {
-                        $message = "✅ WMBusMeters erfolgreich installiert! Seite wird neu geladen...";
-                        echo "<script>setTimeout(function(){ location.reload(); }, 2000);</script>";
-                    } else {
-                        $message = "❌ Installation fehlgeschlagen. Ausgabe:<br><pre>" . implode("\n", $output) . "</pre>";
-                    }
-                } else {
-                    $message = "❌ Installer-Skript nicht gefunden. Bitte Plugin neu installieren.";
-                }
-                break;
             case 'start':
                 exec("sudo systemctl start wmbusmeters 2>&1", $output, $return);
                 $message = ($return === 0) ? "Service erfolgreich gestartet" : "Fehler beim Starten";
@@ -112,30 +97,27 @@ table th { background-color: #f8f9fa; font-weight: bold; }
 
 <?php if (!$wmbusmeters_installed): ?>
 <div class="warning-box">
-    <h3>⚠️ WMBusMeters noch nicht installiert</h3>
-    <p><strong>Ein Klick genügt!</strong></p>
-    <p>WMBusMeters wird automatisch über die Debian-Paketverwaltung installiert.</p>
+    <h3>⚠️ Installation fehlgeschlagen</h3>
+    <p><strong>WMBusMeters wurde während der Plugin-Installation nicht gefunden.</strong></p>
+    <p>Dies kann passieren wenn:</p>
+    <ul>
+        <li>Keine Internetverbindung während der Installation bestand</li>
+        <li>Das Debian-Repository nicht erreichbar war</li>
+        <li>Ein Installationsfehler aufgetreten ist</li>
+    </ul>
     
-    <form method="post" style="margin: 20px 0;">
-        <button type="submit" name="action" value="install_now" class="btn btn-success" style="font-size: 18px; padding: 12px 30px;">
-            📦 Jetzt Installieren
-        </button>
-    </form>
-    
-    <p><small>Die Installation dauert ca. 30 Sekunden und installiert die neueste stabile Version.</small></p>
-    
-    <details style="margin-top: 20px;">
-        <summary style="cursor: pointer;"><strong>🔧 Manuelle Installation (falls automatisch fehlschlägt)</strong></summary>
-        <div style="margin-top: 10px;">
-            <p>Falls die automatische Installation fehlschlägt, können Sie WMBusMeters manuell installieren:</p>
-            <div style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; margin: 10px 0;">
-                ssh root@loxberry<br>
-                apt-get update<br>
-                apt-get install -y wmbusmeters
-            </div>
-            <p>Nach der manuellen Installation laden Sie diese Seite neu.</p>
+    <div style="background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 4px; margin: 20px 0;">
+        <h4>🔧 Lösung: Manuelle Installation</h4>
+        <p>Führen Sie folgende Befehle als root aus:</p>
+        <div style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; margin: 10px 0;">
+            ssh root@loxberry<br>
+            apt-get update<br>
+            apt-get install -y wmbusmeters
         </div>
-    </details>
+        <p>Danach installieren Sie das Plugin erneut oder laden Sie diese Seite neu.</p>
+    </div>
+    
+    <p><small>Überprüfen Sie das Installations-Log unter System → Log-Dateien → Plugin-Installation für weitere Details.</small></p>
 </div>
 <?php endif; ?>
 

@@ -64,64 +64,42 @@ if command -v wmbusmeters &> /dev/null; then
     echo "<INFO> Binary at: $WMBUSMETERS_BIN"
     echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
 else
-    # Create installation helper script that uses sudo
-    echo "<INFO> Creating auto-installer script..."
+    # Install wmbusmeters via apt-get (we run as root during plugin installation)
+    echo "<INFO> Installing WMBusMeters from Debian repository..."
+    echo "<INFO> This happens automatically during plugin installation"
     
-    cat > "$PDATA/auto-install-wmbusmeters.sh" << 'INSTALLER_SCRIPT'
-#!/bin/bash
-# Automatic WMBusMeters installer
-# This script attempts to install wmbusmeters system-wide
-
-echo "=== WMBusMeters Auto-Installer ==="
-echo "This will install wmbusmeters system-wide..."
-
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    echo "ERROR: This script must be run as root"
-    echo "Please run: sudo $0"
-    exit 1
-fi
-
-# Update package lists
-echo "Updating package lists..."
-apt-get update -qq
-
-# Install wmbusmeters
-echo "Installing wmbusmeters..."
-DEBIAN_FRONTEND=noninteractive apt-get install -y wmbusmeters
-
-# Verify installation
-if command -v wmbusmeters &> /dev/null; then
-    VERSION=$(wmbusmeters --version 2>&1 | head -n1)
-    echo "SUCCESS: WMBusMeters installed: $VERSION"
-    exit 0
-else
-    echo "FAILED: Installation unsuccessful"
-    exit 1
-fi
-INSTALLER_SCRIPT
-
-    chmod +x "$PDATA/auto-install-wmbusmeters.sh"
-    
-    # Try to run the installer automatically
-    echo "<INFO> Attempting automatic installation..."
-    
-    if sudo -n true 2>/dev/null; then
-        # sudo without password is available
-        echo "<INFO> Sudo access available, installing now..."
-        if sudo "$PDATA/auto-install-wmbusmeters.sh" 2>&1 | tee -a $LOGFILE; then
-            if command -v wmbusmeters &> /dev/null; then
-                CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
-                WMBUSMETERS_BIN=$(which wmbusmeters)
-                echo "<OK> WMBusMeters installed automatically: $CURRENT_VERSION"
-                echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
-            fi
+    # Check if we're running as root (we should be during plugin installation)
+    if [ "$EUID" -eq 0 ] || [ "$(id -u)" -eq 0 ]; then
+        echo "<INFO> Running with root privileges, installing now..."
+        
+        # Update package lists
+        echo "<INFO> Updating package lists..."
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq 2>&1 | tee -a $LOGFILE
+        
+        # Install wmbusmeters
+        echo "<INFO> Installing wmbusmeters package..."
+        apt-get install -y wmbusmeters 2>&1 | tee -a $LOGFILE
+        
+        # Verify installation
+        if command -v wmbusmeters &> /dev/null; then
+            CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+            WMBUSMETERS_BIN=$(which wmbusmeters)
+            echo "<OK> WMBusMeters installed successfully: $CURRENT_VERSION"
+            echo "<OK> Binary at: $WMBUSMETERS_BIN"
+            echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
+        else
+            echo "<FAIL> Installation failed - wmbusmeters command not found"
+            echo "<INFO> Check your internet connection and try again"
+            echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+            WMBUSMETERS_BIN="NOT_INSTALLED"
         fi
     else
-        echo "<INFO> Sudo access not available during plugin installation"
-        echo "<INFO> Installation will complete in the background..."
-        echo "NOT_INSTALLED_YET" > $PDATA/wmbusmeters_bin_path.txt
-        WMBUSMETERS_BIN="NOT_INSTALLED_YET"
+        echo "<WARN> Not running as root - this is unexpected"
+        echo "<WARN> WMBusMeters needs to be installed manually"
+        echo "<INFO> Run as root: apt-get update && apt-get install -y wmbusmeters"
+        echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+        WMBUSMETERS_BIN="NOT_INSTALLED"
     fi
 fi
 
@@ -234,20 +212,30 @@ EOFSCRIPT
 
 chmod +x $PBIN/wmbusmeters-control.sh
 
-# Install sudoers file for password-less sudo access
+# Install sudoers file for service management (only systemctl commands)
 if [ -f "$PTEMPPATH/sudoers" ]; then
-    echo "<INFO> Installing sudoers configuration..."
-    # Update paths in sudoers file
-    sed "s|/opt/loxberry/data/plugins/wmbusmeters|$PDATA|g" "$PTEMPPATH/sudoers" > /tmp/wmbusmeters_sudoers
+    echo "<INFO> Installing sudoers configuration for service management..."
+    
+    # Create minimal sudoers file (only for systemctl)
+    cat > /tmp/wmbusmeters_sudoers << SUDOERS_EOF
+# Sudoers file for WMBusMeters Plugin - Service Management Only
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl start wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl stop wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl restart wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl status wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl enable wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl disable wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl is-active wmbusmeters
+SUDOERS_EOF
     
     # Install sudoers file (requires root, but LoxBerry installer runs as root)
-    if [ -w "/etc/sudoers.d" ]; then
+    if [ -w "/etc/sudoers.d" ] || [ "$EUID" -eq 0 ]; then
         cp /tmp/wmbusmeters_sudoers /etc/sudoers.d/loxberry-plugin-wmbusmeters
         chmod 0440 /etc/sudoers.d/loxberry-plugin-wmbusmeters
-        chown root:root /etc/sudoers.d/loxberry-plugin-wmbusmeters
-        echo "<OK> Sudoers configuration installed"
+        chown root:root /etc/sudoers.d/loxberry-plugin-wmbusmeters 2>/dev/null || true
+        echo "<OK> Sudoers configuration installed (service management only)"
     else
-        echo "<WARN> Cannot install sudoers file (no write access to /etc/sudoers.d)"
+        echo "<WARN> Cannot install sudoers file (no root access)"
     fi
     rm -f /tmp/wmbusmeters_sudoers
 fi
