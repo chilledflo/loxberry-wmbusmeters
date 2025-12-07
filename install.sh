@@ -90,22 +90,35 @@ else
         echo "<INFO> Build tools available, proceeding with compilation..."
         cd /tmp
         
-        # Try multiple versions
-        VERSIONS=("1.19.0" "1.18.0" "1.17.1")
+        # Get latest release tag from GitHub API
+        echo "<INFO> Fetching latest release version from GitHub..."
+        LATEST_VERSION=$(wget -qO- "https://api.github.com/repos/wmbusmeters/wmbusmeters/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        
+        if [ -z "$LATEST_VERSION" ]; then
+            echo "<WARN> Could not fetch latest version from GitHub API, using fallback version"
+            LATEST_VERSION="1.19.0"
+        else
+            echo "<INFO> Latest version: $LATEST_VERSION"
+        fi
+        
         COMPILE_SUCCESS=false
         
-        for VERSION in "${VERSIONS[@]}"; do
-            echo "<INFO> Trying to compile version $VERSION..."
+        echo "<INFO> Compiling version $LATEST_VERSION..."
+        
+        # Clean up previous attempt
+        rm -rf wmbusmeters-* wmbusmeters.zip
+        
+        # Download source
+            if wget -q "https://github.com/wmbusmeters/wmbusmeters/archive/refs/tags/$LATEST_VERSION.zip" -O wmbusmeters.zip; then
+            echo "<INFO> Downloaded source code $LATEST_VERSION"
             
-            # Clean up previous attempt
-            rm -rf wmbusmeters-$VERSION wmbusmeters.zip
-            
-            # Download source
-            if wget -q "https://github.com/wmbusmeters/wmbusmeters/archive/refs/tags/$VERSION.zip" -O wmbusmeters.zip; then
-                echo "<INFO> Downloaded source code v$VERSION"
+            if unzip -q wmbusmeters.zip; then
+                # Find the extracted directory (could be wmbusmeters-1.19.0 or wmbusmeters-v1.19.0)
+                EXTRACT_DIR=$(ls -d wmbusmeters-* 2>/dev/null | head -n1)
                 
-                if unzip -q wmbusmeters.zip; then
-                    cd wmbusmeters-$VERSION 2>/dev/null || cd wmbusmeters-$VERSION 2>/dev/null || continue
+                if [ -n "$EXTRACT_DIR" ] && [ -d "$EXTRACT_DIR" ]; then
+                    cd "$EXTRACT_DIR"
+                    echo "<INFO> Entered directory: $EXTRACT_DIR"
                     
                     # Compile (make only the binary, skip tests)
                     echo "<INFO> Compiling wmbusmeters (this may take 2-3 minutes)..."
@@ -122,28 +135,33 @@ else
                                 echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
                                 WMBUSMETERS_BIN="$PBIN/wmbusmeters"
                                 COMPILE_SUCCESS=true
-                                break
                             else
-                                echo "<WARN> Binary compiled but doesn't work, trying next version..."
+                                echo "<WARN> Binary compiled but doesn't work"
                             fi
+                        else
+                            echo "<WARN> Compilation produced no working binary"
                         fi
                     else
-                        echo "<WARN> Compilation failed for v$VERSION, trying next version..."
+                        echo "<FAIL> Compilation failed"
                     fi
                     
                     cd /tmp
+                else
+                    echo "<FAIL> Could not find extracted directory"
                 fi
+            else
+                echo "<FAIL> Could not extract downloaded archive"
             fi
-        done
-        
-        # Clean up
+        else
+            echo "<FAIL> Could not download source code"
+        fi        # Clean up
         cd /tmp
         rm -rf wmbusmeters-* wmbusmeters.zip
         
         if [ "$COMPILE_SUCCESS" = false ]; then
-            echo "<FAIL> Could not compile any version successfully"
-            echo "<FAIL> Tried versions: ${VERSIONS[*]}"
+            echo "<FAIL> Compilation of version $LATEST_VERSION failed"
             echo "<INFO> Check installation log for compilation errors"
+            echo "<INFO> Verify build tools are installed: g++ make librtlsdr-dev rtl-sdr"
             echo "<INFO> Manual installation may be required"
             echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
             WMBUSMETERS_BIN="NOT_INSTALLED"
