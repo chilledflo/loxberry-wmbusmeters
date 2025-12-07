@@ -58,6 +58,49 @@ if [ $FREESPACE -lt 100 ]; then
     exit 1
 fi
 
+# ==============================================================================
+# INSTALL WMBUSMETERS HERE (preinstall.sh runs as root!)
+# ==============================================================================
+echo "<INFO> =========================================="
+echo "<INFO> Installing WMBusMeters (running as root)"
+echo "<INFO> =========================================="
+
+# Check if already installed
+if command -v wmbusmeters &> /dev/null; then
+    CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+    echo "<OK> WMBusMeters already installed: $CURRENT_VERSION"
+else
+    echo "<INFO> Installing WMBusMeters from Debian repository..."
+    
+    # We run as root in preinstall.sh
+    echo "<INFO> Current user: $(whoami)"
+    echo "<INFO> User ID: $(id -u)"
+    
+    # Update package lists
+    echo "<INFO> Updating package lists..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq 2>&1 | tee -a $LOGFILE
+    
+    # Install wmbusmeters
+    echo "<INFO> Installing wmbusmeters package..."
+    apt-get install -y wmbusmeters 2>&1 | tee -a $LOGFILE
+    
+    # Verify installation
+    if command -v wmbusmeters &> /dev/null; then
+        CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+        echo "<OK> ✓ WMBusMeters successfully installed: $CURRENT_VERSION"
+    else
+        echo "<FAIL> ✗ WMBusMeters installation failed"
+        echo "<INFO> This may be due to:"
+        echo "<INFO> - No internet connection"
+        echo "<INFO> - Debian repository not available"
+        echo "<INFO> - Package not found in current Debian version"
+        echo "<WARN> Plugin will still install, but WMBusMeters needs manual installation"
+    fi
+fi
+
+echo "<INFO> =========================================="
+
 # Try to find the actual temp path and fix permissions
 echo "<INFO> Searching for install.sh..."
 INSTALL_SCRIPT=""

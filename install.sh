@@ -64,43 +64,12 @@ if command -v wmbusmeters &> /dev/null; then
     echo "<INFO> Binary at: $WMBUSMETERS_BIN"
     echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
 else
-    # Install wmbusmeters via apt-get (we run as root during plugin installation)
-    echo "<INFO> Installing WMBusMeters from Debian repository..."
-    echo "<INFO> This happens automatically during plugin installation"
-    
-    # Check if we're running as root (we should be during plugin installation)
-    if [ "$EUID" -eq 0 ] || [ "$(id -u)" -eq 0 ]; then
-        echo "<INFO> Running with root privileges, installing now..."
-        
-        # Update package lists
-        echo "<INFO> Updating package lists..."
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update -qq 2>&1 | tee -a $LOGFILE
-        
-        # Install wmbusmeters
-        echo "<INFO> Installing wmbusmeters package..."
-        apt-get install -y wmbusmeters 2>&1 | tee -a $LOGFILE
-        
-        # Verify installation
-        if command -v wmbusmeters &> /dev/null; then
-            CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
-            WMBUSMETERS_BIN=$(which wmbusmeters)
-            echo "<OK> WMBusMeters installed successfully: $CURRENT_VERSION"
-            echo "<OK> Binary at: $WMBUSMETERS_BIN"
-            echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
-        else
-            echo "<FAIL> Installation failed - wmbusmeters command not found"
-            echo "<INFO> Check your internet connection and try again"
-            echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
-            WMBUSMETERS_BIN="NOT_INSTALLED"
-        fi
-    else
-        echo "<WARN> Not running as root - this is unexpected"
-        echo "<WARN> WMBusMeters needs to be installed manually"
-        echo "<INFO> Run as root: apt-get update && apt-get install -y wmbusmeters"
-        echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
-        WMBUSMETERS_BIN="NOT_INSTALLED"
-    fi
+    # WMBusMeters should have been installed by preinstall.sh (which runs as root)
+    echo "<WARN> WMBusMeters not found in system"
+    echo "<INFO> Should have been installed by preinstall.sh"
+    echo "<INFO> Check preinstall.log for installation details"
+    echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
+    WMBUSMETERS_BIN="NOT_INSTALLED"
 fi
 
 # Final status check
