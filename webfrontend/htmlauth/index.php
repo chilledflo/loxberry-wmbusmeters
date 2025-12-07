@@ -25,6 +25,31 @@ $message = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
+            case 'install_manual':
+                // Run installation script with sudo
+                $install_script = $lbpbindir . "/install-wmbusmeters.sh";
+                if (file_exists($install_script)) {
+                    $message = "<div style='background: #fff3cd; padding: 15px; border-radius: 4px; margin: 20px 0;'>";
+                    $message .= "<h4>⏳ Installation läuft...</h4>";
+                    $message .= "<p>Dies kann 30-60 Sekunden dauern. Bitte warten...</p>";
+                    $message .= "<div style='font-family: monospace; background: #000; color: #0f0; padding: 10px; border-radius: 4px; margin: 10px 0; max-height: 300px; overflow-y: auto;'>";
+                    
+                    exec("sudo " . escapeshellarg($install_script) . " 2>&1", $output, $return);
+                    $message .= nl2br(htmlspecialchars(implode("\n", $output)));
+                    
+                    $message .= "</div>";
+                    if ($return === 0) {
+                        $message .= "<p style='color: #28a745; font-weight: bold;'>✅ Installation erfolgreich!</p>";
+                        $message .= "<script>setTimeout(function(){ location.reload(); }, 2000);</script>";
+                    } else {
+                        $message .= "<p style='color: #dc3545; font-weight: bold;'>❌ Installation fehlgeschlagen (Exit Code: $return)</p>";
+                        $message .= "<p>Versuchen Sie es erneut oder installieren Sie manuell per SSH.</p>";
+                    }
+                    $message .= "</div>";
+                } else {
+                    $message = "❌ Installations-Skript nicht gefunden: $install_script<br>Bitte Plugin neu installieren.";
+                }
+                break;
             case 'start':
                 exec("sudo systemctl start wmbusmeters 2>&1", $output, $return);
                 $message = ($return === 0) ? "Service erfolgreich gestartet" : "Fehler beim Starten";
@@ -107,22 +132,41 @@ table th { background-color: #f8f9fa; font-weight: bold; }
     </ul>
     
     <div style="background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 4px; margin: 20px 0;">
-        <h4>🔧 Lösung: Manuelle Installation</h4>
-        <p>Führen Sie folgende Befehle als root aus:</p>
-        <div style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; margin: 10px 0;">
-            ssh root@loxberry<br>
-            apt-get update<br>
-            apt-get install -y wmbusmeters
-        </div>
-        <p>Danach installieren Sie das Plugin erneut oder laden Sie diese Seite neu.</p>
+        <h4>🔧 Automatische Installation</h4>
+        <p><strong>Klicken Sie auf den Button unten:</strong></p>
+        
+        <form method="post" style="margin: 15px 0;">
+            <button type="submit" name="action" value="install_manual" 
+                    style="background: #28a745; color: white; padding: 12px 24px; font-size: 16px; border: none; border-radius: 4px; cursor: pointer;">
+                🚀 WMBusMeters jetzt installieren
+            </button>
+        </form>
+        
+        <p style="margin-top: 15px;"><small>
+            Dies führt das Installations-Skript mit sudo aus.<br>
+            Die Installation dauert ca. 30 Sekunden.
+        </small></p>
     </div>
     
-    <p><small>Überprüfen Sie das Installations-Log unter System → Log-Dateien → Plugin-Installation für weitere Details.</small></p>
+    <details style="margin-top: 20px;">
+        <summary style="cursor: pointer; color: #0c5460; font-weight: bold;">📋 Alternative: Manuelle Installation per SSH</summary>
+        <div style="margin-top: 10px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+            <p>Falls der Button nicht funktioniert, können Sie manuell installieren:</p>
+            <div style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; margin: 10px 0;">
+                ssh root@loxberry<br>
+                apt-get update<br>
+                apt-get install -y wmbusmeters
+            </div>
+            <p>Danach laden Sie diese Seite neu.</p>
+        </div>
+    </details>
+    
+    <p style="margin-top: 20px;"><small>Überprüfen Sie das Installations-Log unter System → Log-Dateien → Plugin-Installation für weitere Details.</small></p>
 </div>
 <?php endif; ?>
 
 <?php if ($message): ?>
-<div class="info-box"><?php echo htmlspecialchars($message); ?></div>
+<div class="info-box"><?php echo $message; ?></div>
 <?php endif; ?>
 
 <h2>Service Status</h2>
