@@ -156,23 +156,23 @@ table th { background-color: #f8f9fa; font-weight: bold; }
     
     <div style="background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 4px; margin: 20px 0;">
         <h4>🔧 Automatische Installation</h4>
-        <p><strong>Geben Sie das Passwort für den Benutzer <code>loxberry</code> ein:</strong></p>
+        <p><strong>Geben Sie das Root-Passwort ein:</strong></p>
         
         <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin: 10px 0; border-left: 4px solid #ffc107;">
-            <strong>⚠️ Wichtig:</strong> Verwenden Sie das Passwort des Benutzers <strong>loxberry</strong> (nicht root!)<br>
-            <small>Das Web-Interface läuft als User: <code><?php echo exec('whoami'); ?></code></small>
+            <strong>⚠️ Wichtig:</strong> Verwenden Sie das Passwort des <strong>root</strong> Benutzers<br>
+            <small>Die Installation benötigt root-Rechte um apt-get auszuführen</small>
         </div>
         
         <form method="post" style="margin: 15px 0;">
             <div style="margin-bottom: 15px;">
                 <label for="root_password" style="display: block; margin-bottom: 5px; font-weight: bold;">
-                    Passwort für "loxberry" Benutzer:
+                    Root-Passwort:
                 </label>
                 <input type="password" 
                        id="root_password" 
                        name="root_password" 
                        required
-                       placeholder="loxberry Passwort eingeben"
+                       placeholder="Root-Passwort eingeben"
                        style="width: 300px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
             </div>
             
