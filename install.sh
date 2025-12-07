@@ -64,12 +64,12 @@ if command -v wmbusmeters &> /dev/null; then
     echo "<INFO> Binary at: $WMBUSMETERS_BIN"
     echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
 else
-    # WMBusMeters should have been installed by preinstall.sh (which runs as root)
-    echo "<WARN> WMBusMeters not found in system"
-    echo "<INFO> Should have been installed by preinstall.sh"
-    echo "<INFO> Check preinstall.log for installation details"
-    echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
-    WMBUSMETERS_BIN="NOT_INSTALLED"
+    # WMBusMeters will be installed by postinstall.sh
+    echo "<INFO> WMBusMeters not yet installed"
+    echo "<INFO> Will be installed automatically by postinstall.sh"
+    echo "<INFO> Installation script created at: $PBIN/install-wmbusmeters.sh"
+    echo "PENDING" > $PDATA/wmbusmeters_bin_path.txt
+    WMBUSMETERS_BIN="PENDING"
 fi
 
 # Final status check
@@ -153,6 +153,48 @@ mkdir -p $PDATA/logs
 chmod 775 $PDATA/logs
 echo "<OK> Log directory created at: $PDATA/logs"
 
+# Create installation script that will be run with sudo in postinstall
+cat > $PBIN/install-wmbusmeters.sh << 'EOFINSTALL'
+#!/bin/bash
+# WMBusMeters Installation Script
+# This script is run with sudo by postinstall.sh
+
+echo "Installing WMBusMeters from Debian repository..."
+
+# Check if already installed
+if command -v wmbusmeters &> /dev/null; then
+    VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+    echo "WMBusMeters already installed: $VERSION"
+    exit 0
+fi
+
+# Must run as root
+if [ "$EUID" -ne 0 ]; then
+    echo "ERROR: This script must be run as root"
+    exit 1
+fi
+
+# Update and install
+export DEBIAN_FRONTEND=noninteractive
+echo "Updating package lists..."
+apt-get update -qq
+
+echo "Installing wmbusmeters..."
+apt-get install -y wmbusmeters
+
+# Verify
+if command -v wmbusmeters &> /dev/null; then
+    VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+    echo "SUCCESS: WMBusMeters installed: $VERSION"
+    exit 0
+else
+    echo "ERROR: Installation failed"
+    exit 1
+fi
+EOFINSTALL
+
+chmod +x $PBIN/install-wmbusmeters.sh
+
 # Create helper script for easy service management
 cat > $PBIN/wmbusmeters-control.sh << 'EOFSCRIPT'
 #!/bin/bash
@@ -181,13 +223,16 @@ EOFSCRIPT
 
 chmod +x $PBIN/wmbusmeters-control.sh
 
-# Install sudoers file for service management (only systemctl commands)
-if [ -f "$PTEMPPATH/sudoers" ]; then
-    echo "<INFO> Installing sudoers configuration for service management..."
-    
-    # Create minimal sudoers file (only for systemctl)
-    cat > /tmp/wmbusmeters_sudoers << SUDOERS_EOF
-# Sudoers file for WMBusMeters Plugin - Service Management Only
+# Install sudoers file for installation and service management
+echo "<INFO> Installing sudoers configuration..."
+
+# Create sudoers file
+cat > /tmp/wmbusmeters_sudoers << SUDOERS_EOF
+# Sudoers file for WMBusMeters Plugin
+# Installation script
+loxberry ALL=(ALL) NOPASSWD: /opt/loxberry/bin/plugins/wmbusmeters/install-wmbusmeters.sh
+
+# Service management
 loxberry ALL=(ALL) NOPASSWD: /bin/systemctl start wmbusmeters
 loxberry ALL=(ALL) NOPASSWD: /bin/systemctl stop wmbusmeters
 loxberry ALL=(ALL) NOPASSWD: /bin/systemctl restart wmbusmeters
@@ -196,18 +241,17 @@ loxberry ALL=(ALL) NOPASSWD: /bin/systemctl enable wmbusmeters
 loxberry ALL=(ALL) NOPASSWD: /bin/systemctl disable wmbusmeters
 loxberry ALL=(ALL) NOPASSWD: /bin/systemctl is-active wmbusmeters
 SUDOERS_EOF
-    
-    # Install sudoers file (requires root, but LoxBerry installer runs as root)
-    if [ -w "/etc/sudoers.d" ] || [ "$EUID" -eq 0 ]; then
-        cp /tmp/wmbusmeters_sudoers /etc/sudoers.d/loxberry-plugin-wmbusmeters
-        chmod 0440 /etc/sudoers.d/loxberry-plugin-wmbusmeters
-        chown root:root /etc/sudoers.d/loxberry-plugin-wmbusmeters 2>/dev/null || true
-        echo "<OK> Sudoers configuration installed (service management only)"
-    else
-        echo "<WARN> Cannot install sudoers file (no root access)"
-    fi
-    rm -f /tmp/wmbusmeters_sudoers
+
+# Try to install it - this MIGHT work if we have the right permissions
+if cp /tmp/wmbusmeters_sudoers /etc/sudoers.d/loxberry-plugin-wmbusmeters 2>/dev/null; then
+    chmod 0440 /etc/sudoers.d/loxberry-plugin-wmbusmeters 2>/dev/null
+    chown root:root /etc/sudoers.d/loxberry-plugin-wmbusmeters 2>/dev/null
+    echo "<OK> Sudoers configuration installed"
+else
+    echo "<INFO> Sudoers file will be installed by LoxBerry (needs root)"
+    # LoxBerry will install it from the plugin's install directory
 fi
+rm -f /tmp/wmbusmeters_sudoers
 
 # Clean up
 cd /tmp

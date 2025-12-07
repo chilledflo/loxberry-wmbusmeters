@@ -1,0 +1,12 @@
+# Sudoers file for WMBusMeters Plugin
+# Installation script (for postinstall.sh)
+loxberry ALL=(ALL) NOPASSWD: <LBPBIN>/install-wmbusmeters.sh
+
+# Service management
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl start wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl stop wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl restart wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl status wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl enable wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl disable wmbusmeters
+loxberry ALL=(ALL) NOPASSWD: /bin/systemctl is-active wmbusmeters
