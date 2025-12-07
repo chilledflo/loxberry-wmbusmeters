@@ -64,108 +64,64 @@ if command -v wmbusmeters &> /dev/null; then
     echo "<INFO> Binary at: $WMBUSMETERS_BIN"
     echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
 else
-    # GitHub releases contain no pre-built binaries - we must compile from source
-    echo "<INFO> Compiling WMBusMeters from source (GitHub has no pre-built binaries)..."
+    # Create installation helper script that uses sudo
+    echo "<INFO> Creating auto-installer script..."
     
-    # Check if required system tools are available
-    MISSING_TOOLS=""
-    for tool in g++ make wget unzip; do
-        if ! command -v $tool &> /dev/null; then
-            MISSING_TOOLS="$MISSING_TOOLS $tool"
-        fi
-    done
+    cat > "$PDATA/auto-install-wmbusmeters.sh" << 'INSTALLER_SCRIPT'
+#!/bin/bash
+# Automatic WMBusMeters installer
+# This script attempts to install wmbusmeters system-wide
+
+echo "=== WMBusMeters Auto-Installer ==="
+echo "This will install wmbusmeters system-wide..."
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    echo "ERROR: This script must be run as root"
+    echo "Please run: sudo $0"
+    exit 1
+fi
+
+# Update package lists
+echo "Updating package lists..."
+apt-get update -qq
+
+# Install wmbusmeters
+echo "Installing wmbusmeters..."
+DEBIAN_FRONTEND=noninteractive apt-get install -y wmbusmeters
+
+# Verify installation
+if command -v wmbusmeters &> /dev/null; then
+    VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+    echo "SUCCESS: WMBusMeters installed: $VERSION"
+    exit 0
+else
+    echo "FAILED: Installation unsuccessful"
+    exit 1
+fi
+INSTALLER_SCRIPT
+
+    chmod +x "$PDATA/auto-install-wmbusmeters.sh"
     
-    if [ -n "$MISSING_TOOLS" ]; then
-        echo "<FAIL> Required build tools not available:$MISSING_TOOLS"
-        echo "<FAIL> Cannot compile without: g++, make, wget, unzip"
-        echo "<FAIL> These must be installed system-wide (requires sudo/root access)"
-        echo "<INFO> Manual installation required:"
-        echo "<INFO> 1. SSH to LoxBerry as root"
-        echo "<INFO> 2. Run: apt-get update && apt-get install -y g++ make librtlsdr-dev rtl-sdr"
-        echo "<INFO> 3. Reinstall this plugin"
-        echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
-        WMBUSMETERS_BIN="NOT_INSTALLED"
-    else
-        # Download and compile wmbusmeters
-        echo "<INFO> Build tools available, proceeding with compilation..."
-        cd /tmp
-        
-        # Get latest release tag from GitHub API
-        echo "<INFO> Fetching latest release version from GitHub..."
-        LATEST_VERSION=$(wget -qO- "https://api.github.com/repos/wmbusmeters/wmbusmeters/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-        
-        if [ -z "$LATEST_VERSION" ]; then
-            echo "<WARN> Could not fetch latest version from GitHub API, using fallback version"
-            LATEST_VERSION="1.19.0"
-        else
-            echo "<INFO> Latest version: $LATEST_VERSION"
-        fi
-        
-        COMPILE_SUCCESS=false
-        
-        echo "<INFO> Compiling version $LATEST_VERSION..."
-        
-        # Clean up previous attempt
-        rm -rf wmbusmeters-* wmbusmeters.zip
-        
-        # Download source
-            if wget -q "https://github.com/wmbusmeters/wmbusmeters/archive/refs/tags/$LATEST_VERSION.zip" -O wmbusmeters.zip; then
-            echo "<INFO> Downloaded source code $LATEST_VERSION"
-            
-            if unzip -q wmbusmeters.zip; then
-                # Find the extracted directory (could be wmbusmeters-1.19.0 or wmbusmeters-v1.19.0)
-                EXTRACT_DIR=$(ls -d wmbusmeters-* 2>/dev/null | head -n1)
-                
-                if [ -n "$EXTRACT_DIR" ] && [ -d "$EXTRACT_DIR" ]; then
-                    cd "$EXTRACT_DIR"
-                    echo "<INFO> Entered directory: $EXTRACT_DIR"
-                    
-                    # Compile (make only the binary, skip tests)
-                    echo "<INFO> Compiling wmbusmeters (this may take 2-3 minutes)..."
-                    if make wmbusmeters 2>&1 | tee -a $LOGFILE; then
-                        if [ -f "wmbusmeters" ] && [ -x "wmbusmeters" ]; then
-                            # Test if it works
-                            if ./wmbusmeters --version &> /dev/null; then
-                                # Copy to plugin bin directory
-                                cp wmbusmeters "$PBIN/wmbusmeters"
-                                chmod +x "$PBIN/wmbusmeters"
-                                
-                                INSTALLED_VERSION=$("$PBIN/wmbusmeters" --version 2>&1 | head -n1)
-                                echo "<OK> WMBusMeters compiled successfully: $INSTALLED_VERSION"
-                                echo "$PBIN/wmbusmeters" > $PDATA/wmbusmeters_bin_path.txt
-                                WMBUSMETERS_BIN="$PBIN/wmbusmeters"
-                                COMPILE_SUCCESS=true
-                            else
-                                echo "<WARN> Binary compiled but doesn't work"
-                            fi
-                        else
-                            echo "<WARN> Compilation produced no working binary"
-                        fi
-                    else
-                        echo "<FAIL> Compilation failed"
-                    fi
-                    
-                    cd /tmp
-                else
-                    echo "<FAIL> Could not find extracted directory"
-                fi
-            else
-                echo "<FAIL> Could not extract downloaded archive"
+    # Try to run the installer automatically
+    echo "<INFO> Attempting automatic installation..."
+    
+    if sudo -n true 2>/dev/null; then
+        # sudo without password is available
+        echo "<INFO> Sudo access available, installing now..."
+        if sudo "$PDATA/auto-install-wmbusmeters.sh" 2>&1 | tee -a $LOGFILE; then
+            if command -v wmbusmeters &> /dev/null; then
+                CURRENT_VERSION=$(wmbusmeters --version 2>&1 | head -n1)
+                WMBUSMETERS_BIN=$(which wmbusmeters)
+                echo "<OK> WMBusMeters installed automatically: $CURRENT_VERSION"
+                echo "$WMBUSMETERS_BIN" > $PDATA/wmbusmeters_bin_path.txt
             fi
-        else
-            echo "<FAIL> Could not download source code"
-        fi        # Clean up
-        cd /tmp
-        rm -rf wmbusmeters-* wmbusmeters.zip
-        
-        if [ "$COMPILE_SUCCESS" = false ]; then
-            echo "<FAIL> Compilation of version $LATEST_VERSION failed"
-            echo "<INFO> Check installation log for compilation errors"
-            echo "<INFO> Verify build tools are installed: g++ make librtlsdr-dev rtl-sdr"
-            echo "<INFO> Manual installation may be required"
-            echo "NOT_INSTALLED" > $PDATA/wmbusmeters_bin_path.txt
-            WMBUSMETERS_BIN="NOT_INSTALLED"
         fi
+    else
+        echo "<INFO> Sudo access not available during plugin installation"
+        echo "<INFO> Installation will complete in the background..."
+        echo "NOT_INSTALLED_YET" > $PDATA/wmbusmeters_bin_path.txt
+        WMBUSMETERS_BIN="NOT_INSTALLED_YET"
     fi
 fi
 
@@ -278,12 +234,30 @@ EOFSCRIPT
 
 chmod +x $PBIN/wmbusmeters-control.sh
 
+# Install sudoers file for password-less sudo access
+if [ -f "$PTEMPPATH/sudoers" ]; then
+    echo "<INFO> Installing sudoers configuration..."
+    # Update paths in sudoers file
+    sed "s|/opt/loxberry/data/plugins/wmbusmeters|$PDATA|g" "$PTEMPPATH/sudoers" > /tmp/wmbusmeters_sudoers
+    
+    # Install sudoers file (requires root, but LoxBerry installer runs as root)
+    if [ -w "/etc/sudoers.d" ]; then
+        cp /tmp/wmbusmeters_sudoers /etc/sudoers.d/loxberry-plugin-wmbusmeters
+        chmod 0440 /etc/sudoers.d/loxberry-plugin-wmbusmeters
+        chown root:root /etc/sudoers.d/loxberry-plugin-wmbusmeters
+        echo "<OK> Sudoers configuration installed"
+    else
+        echo "<WARN> Cannot install sudoers file (no write access to /etc/sudoers.d)"
+    fi
+    rm -f /tmp/wmbusmeters_sudoers
+fi
+
 # Clean up
 cd /tmp
 rm -rf wmbusmeters
 
 echo "<OK> Installation completed successfully"
-echo "<INFO> Please configure your meters in the web interface"
+echo "<INFO> Click 'Install Now' button in web interface to install WMBusMeters"
 echo "<INFO> Documentation: https://github.com/wmbusmeters/wmbusmeters"
 
 exit 0

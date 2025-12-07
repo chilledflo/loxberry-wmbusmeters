@@ -25,6 +25,21 @@ $message = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
+            case 'install_now':
+                // Run the auto-installer script
+                $installer_script = $lbpdatadir . "/auto-install-wmbusmeters.sh";
+                if (file_exists($installer_script)) {
+                    exec("sudo " . $installer_script . " 2>&1", $output, $return);
+                    if ($return === 0) {
+                        $message = "✅ WMBusMeters erfolgreich installiert! Seite wird neu geladen...";
+                        echo "<script>setTimeout(function(){ location.reload(); }, 2000);</script>";
+                    } else {
+                        $message = "❌ Installation fehlgeschlagen. Ausgabe:<br><pre>" . implode("\n", $output) . "</pre>";
+                    }
+                } else {
+                    $message = "❌ Installer-Skript nicht gefunden. Bitte Plugin neu installieren.";
+                }
+                break;
             case 'start':
                 exec("sudo systemctl start wmbusmeters 2>&1", $output, $return);
                 $message = ($return === 0) ? "Service erfolgreich gestartet" : "Fehler beim Starten";
@@ -97,25 +112,30 @@ table th { background-color: #f8f9fa; font-weight: bold; }
 
 <?php if (!$wmbusmeters_installed): ?>
 <div class="warning-box">
-    <h3>⚠️ Installation fehlgeschlagen</h3>
-    <p><strong>WMBusMeters konnte nicht automatisch installiert werden.</strong></p>
-    <p>Mögliche Ursachen:</p>
-    <ul>
-        <li>Keine Internetverbindung während der Installation</li>
-        <li>GitHub oder OpenSUSE Repository nicht erreichbar</li>
-        <li>Inkompatible Architektur</li>
-    </ul>
-    <p><strong>Lösungen:</strong></p>
-    <ol>
-        <li>Plugin neu installieren (mit aktiver Internetverbindung)</li>
-        <li>Oder manuell installieren:
+    <h3>⚠️ WMBusMeters noch nicht installiert</h3>
+    <p><strong>Ein Klick genügt!</strong></p>
+    <p>WMBusMeters wird automatisch über die Debian-Paketverwaltung installiert.</p>
+    
+    <form method="post" style="margin: 20px 0;">
+        <button type="submit" name="action" value="install_now" class="btn btn-success" style="font-size: 18px; padding: 12px 30px;">
+            📦 Jetzt Installieren
+        </button>
+    </form>
+    
+    <p><small>Die Installation dauert ca. 30 Sekunden und installiert die neueste stabile Version.</small></p>
+    
+    <details style="margin-top: 20px;">
+        <summary style="cursor: pointer;"><strong>🔧 Manuelle Installation (falls automatisch fehlschlägt)</strong></summary>
+        <div style="margin-top: 10px;">
+            <p>Falls die automatische Installation fehlschlägt, können Sie WMBusMeters manuell installieren:</p>
             <div style="background: #000; color: #0f0; padding: 10px; border-radius: 4px; font-family: monospace; margin: 10px 0;">
-                wget http://download.opensuse.org/repositories/home:/weetmuts/Debian_12/amd64/wmbusmeters_1.17.1-1_amd64.deb<br>
-                sudo dpkg -i wmbusmeters_1.17.1-1_amd64.deb
+                ssh root@loxberry<br>
+                apt-get update<br>
+                apt-get install -y wmbusmeters
             </div>
-        </li>
-    </ol>
-    <p><small>Überprüfen Sie das Installations-Log für weitere Details.</small></p>
+            <p>Nach der manuellen Installation laden Sie diese Seite neu.</p>
+        </div>
+    </details>
 </div>
 <?php endif; ?>
 
