@@ -26,24 +26,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
             case 'install_manual':
-                // Run installation script with sudo
+                // Run installation script with sudo and password
                 $install_script = $lbpbindir . "/install-wmbusmeters.sh";
+                $root_password = isset($_POST['root_password']) ? $_POST['root_password'] : '';
+                
+                if (empty($root_password)) {
+                    $message = "❌ Bitte geben Sie das Root-Passwort ein.";
+                    break;
+                }
+                
                 if (file_exists($install_script)) {
                     $message = "<div style='background: #fff3cd; padding: 15px; border-radius: 4px; margin: 20px 0;'>";
                     $message .= "<h4>⏳ Installation läuft...</h4>";
                     $message .= "<p>Dies kann 30-60 Sekunden dauern. Bitte warten...</p>";
                     $message .= "<div style='font-family: monospace; background: #000; color: #0f0; padding: 10px; border-radius: 4px; margin: 10px 0; max-height: 300px; overflow-y: auto;'>";
                     
-                    exec("sudo " . escapeshellarg($install_script) . " 2>&1", $output, $return);
-                    $message .= nl2br(htmlspecialchars(implode("\n", $output)));
+                    // Use sudo with password via stdin
+                    $command = "echo " . escapeshellarg($root_password) . " | sudo -S " . escapeshellarg($install_script) . " 2>&1";
+                    exec($command, $output, $return);
+                    
+                    // Remove password prompt from output
+                    $filtered_output = array_filter($output, function($line) {
+                        return stripos($line, '[sudo]') === false && 
+                               stripos($line, 'password') === false;
+                    });
+                    
+                    $message .= nl2br(htmlspecialchars(implode("\n", $filtered_output)));
                     
                     $message .= "</div>";
                     if ($return === 0) {
                         $message .= "<p style='color: #28a745; font-weight: bold;'>✅ Installation erfolgreich!</p>";
                         $message .= "<script>setTimeout(function(){ location.reload(); }, 2000);</script>";
                     } else {
-                        $message .= "<p style='color: #dc3545; font-weight: bold;'>❌ Installation fehlgeschlagen (Exit Code: $return)</p>";
-                        $message .= "<p>Versuchen Sie es erneut oder installieren Sie manuell per SSH.</p>";
+                        // Check if it's a password error
+                        $output_str = implode(" ", $output);
+                        if (stripos($output_str, 'password') !== false || stripos($output_str, 'authentication') !== false) {
+                            $message .= "<p style='color: #dc3545; font-weight: bold;'>❌ Falsches Passwort!</p>";
+                            $message .= "<p>Bitte überprüfen Sie das Root-Passwort und versuchen Sie es erneut.</p>";
+                        } else {
+                            $message .= "<p style='color: #dc3545; font-weight: bold;'>❌ Installation fehlgeschlagen (Exit Code: $return)</p>";
+                            $message .= "<p>Siehe Output oben für Details.</p>";
+                        }
                     }
                     $message .= "</div>";
                 } else {
@@ -133,9 +156,21 @@ table th { background-color: #f8f9fa; font-weight: bold; }
     
     <div style="background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 4px; margin: 20px 0;">
         <h4>🔧 Automatische Installation</h4>
-        <p><strong>Klicken Sie auf den Button unten:</strong></p>
+        <p><strong>Geben Sie das Root-Passwort ein und klicken Sie auf Installieren:</strong></p>
         
         <form method="post" style="margin: 15px 0;">
+            <div style="margin-bottom: 15px;">
+                <label for="root_password" style="display: block; margin-bottom: 5px; font-weight: bold;">
+                    Root-Passwort:
+                </label>
+                <input type="password" 
+                       id="root_password" 
+                       name="root_password" 
+                       required
+                       placeholder="Root-Passwort eingeben"
+                       style="width: 300px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+            </div>
+            
             <button type="submit" name="action" value="install_manual" 
                     style="background: #28a745; color: white; padding: 12px 24px; font-size: 16px; border: none; border-radius: 4px; cursor: pointer;">
                 🚀 WMBusMeters jetzt installieren
@@ -143,7 +178,7 @@ table th { background-color: #f8f9fa; font-weight: bold; }
         </form>
         
         <p style="margin-top: 15px;"><small>
-            Dies führt das Installations-Skript mit sudo aus.<br>
+            Das Passwort wird nur für die Installation verwendet und nicht gespeichert.<br>
             Die Installation dauert ca. 30 Sekunden.
         </small></p>
     </div>
